@@ -168,10 +168,10 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 	firstFailure := 0
 	failedUnits := map[string]bool{}
 	failedEntries := map[string]bool{}
-	if experiment {
+	_, diagnosticMode := ctx.Value(diagnosticKey{}).(func(diagnosticStage))
+	if diagnosticMode {
 		fmt.Println("STAGE setup PASS")
 	}
-	_, diagnosticMode := ctx.Value(diagnosticKey{}).(func(diagnosticStage))
 	diagnosticMode = diagnosticMode && !admission
 	for slot, inv := range selected {
 		u, ok := byID[inv.Unit]
