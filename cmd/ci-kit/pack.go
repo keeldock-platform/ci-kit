@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +34,10 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 	policy, ok := shared.Packs[platform]
 	if !ok {
 		return 2
+	}
+	_, experiment := ctx.Value(diagnosticKey{}).(func(diagnosticStage))
+	if experiment {
+		fmt.Println("STAGE setup START")
 	}
 	index := 0
 	host := capturedExecutor(root, private, &index)
@@ -163,6 +168,9 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 	firstFailure := 0
 	failedUnits := map[string]bool{}
 	failedEntries := map[string]bool{}
+	if experiment {
+		fmt.Println("STAGE setup PASS")
+	}
 	_, diagnosticMode := ctx.Value(diagnosticKey{}).(func(diagnosticStage))
 	diagnosticMode = diagnosticMode && !admission
 	for slot, inv := range selected {

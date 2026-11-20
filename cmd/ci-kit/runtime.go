@@ -75,7 +75,15 @@ func privateWork(ctx context.Context, c control) (code int) {
 		return 6
 	}
 	defer func() {
-		if os.RemoveAll(private) != nil && code == 0 {
+		cleanupErr := os.RemoveAll(private)
+		if experimentRequest(c.Request) {
+			if cleanupErr == nil {
+				fmt.Println("STAGE cleanup PASS")
+			} else {
+				fmt.Println("STAGE cleanup FAIL")
+			}
+		}
+		if cleanupErr != nil && code == 0 {
 			code = 1
 		}
 	}()
@@ -139,6 +147,10 @@ func privateWork(ctx context.Context, c control) (code int) {
 		}
 		return result, nil
 	}
+	experiment := experimentRequest(c.Request)
+	if experiment {
+		fmt.Println("STAGE checkout START")
+	}
 	checkout, e := acquire.Acquire(ctx, req)
 	if e != nil || compositionDigest == "" {
 		return 3
@@ -152,6 +164,9 @@ func privateWork(ctx context.Context, c control) (code int) {
 		_ = os.Unsetenv("SOURCE_READ_" + fmt.Sprintf("%02d", i))
 	}
 	_ = os.Unsetenv("SOURCE_MAP")
+	if experiment {
+		fmt.Println("STAGE checkout PASS")
+	}
 	root := checkout.Sources[m.Root]
 	sources := map[string]catalog.CompositionSource{}
 	for alias, path := range checkout.Sources {
