@@ -23,18 +23,7 @@ function Set-UserOnly([string]$Path, [bool]$Directory) {
   $acl.AddAccessRule($rule)
   Set-Acl -LiteralPath $Path -AclObject $acl
 }
-$base = Join-Path $env:SystemRoot ('System32\ci-kit-' + [guid]::NewGuid().ToString('N'))
-$null = New-Item -ItemType Directory -Path $base
-Set-UserOnly $base $true
-$archive = Join-Path $base 'public.zip'
-$tree = Join-Path $base 'tool'
-$null = New-Item -ItemType Directory -Path $tree
-Set-UserOnly $tree $true
-$ownedConfig = $false
-$configDir = ''
-try {
-  Invoke-WebRequest -Uri ('https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/' + $asset[0]) -OutFile $archive -TimeoutSec 180
-  if ((Get-Item -LiteralPath $archive).Length -gt 256MB -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $asset[1]) { throw 'public archive digest' }
+function Expand-VerifiedZip([string]$archive, [string]$tree) {
   $zip = [System.IO.Compression.ZipFile]::OpenRead($archive)
   $expected = @{}
   $total = 0L
@@ -53,9 +42,17 @@ try {
       $null = [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($target))
       $inputStream = $entry.Open()
       $outputStream = [System.IO.File]::Open($target, [System.IO.FileMode]::CreateNew)
-      try { $inputStream.CopyTo($outputStream) } finally { $inputStream.Dispose(); $outputStream.Dispose() }
-      $inputStream = $entry.Open()
-      try { $expected[$name] = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($inputStream)) } finally { $inputStream.Dispose() }
+      try {
+        $buffer = [byte[]]::new(65536)
+        $actual = 0L
+        while (($read = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+          $actual += $read
+          if ($actual -gt $entry.Length -or $actual -gt 128MB) { throw 'archive expanded size' }
+          $outputStream.Write($buffer, 0, $read)
+        }
+        if ($actual -ne $entry.Length) { throw 'archive declared size' }
+      } finally { $inputStream.Dispose(); $outputStream.Dispose() }
+      $expected[$name] = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
       if ((Get-FileHash -LiteralPath $target).Hash -ne $expected[$name]) { throw 'archive bytes' }
     }
   } finally { $zip.Dispose() }
@@ -70,6 +67,65 @@ try {
   foreach ($dir in @(Get-ChildItem -LiteralPath $tree -Recurse -Directory)) {
     if ($dir.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'archive directory reparse' }
   }
+}
+function Test-ArchiveRefusals([string]$base) {
+  foreach ($kind in @('positive', 'traversal', 'absolute', 'duplicate', 'symlink', 'oversize', 'forged-size')) {
+    $probe = Join-Path $base ('probe-' + $kind)
+    $null = New-Item -ItemType Directory -Path $probe
+    $probeZip = Join-Path $base ('probe-' + $kind + '.zip')
+    $zip = [System.IO.Compression.ZipFile]::Open($probeZip, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+      $names = switch ($kind) {
+        'positive' { @('dir/file') }
+        'traversal' { @('../escape') }
+        'absolute' { @('/escape') }
+        'duplicate' { @('file', 'FILE') }
+        default { @('file') }
+      }
+      foreach ($name in $names) {
+        $entry = $zip.CreateEntry($name)
+        if ($kind -eq 'symlink') { $entry.ExternalAttributes = -1577123840 }
+        $stream = $entry.Open()
+        try {
+          if ($kind -eq 'oversize') {
+            $buffer = [byte[]]::new(1MB)
+            for ($i = 0; $i -lt 129; $i++) { $stream.Write($buffer, 0, $buffer.Length) }
+          } else { $stream.WriteByte(42) }
+        } finally { $stream.Dispose() }
+      }
+    } finally { $zip.Dispose() }
+    if ($kind -eq 'forged-size') {
+      $bytes = [System.IO.File]::ReadAllBytes($probeZip)
+      for ($i = 0; $i -le $bytes.Length - 24; $i++) {
+        $sig = [BitConverter]::ToUInt32($bytes, $i)
+        if ($sig -eq 0x04034b50) { [Array]::Copy([BitConverter]::GetBytes([uint32]0), 0, $bytes, $i + 22, 4) }
+        if ($sig -eq 0x02014b50) { [Array]::Copy([BitConverter]::GetBytes([uint32]0), 0, $bytes, $i + 24, 4) }
+      }
+      [System.IO.File]::WriteAllBytes($probeZip, $bytes)
+    }
+    $refused = $false
+    try { Expand-VerifiedZip $probeZip $probe } catch { $refused = $true }
+    if (($kind -eq 'positive' -and $refused) -or ($kind -ne 'positive' -and -not $refused)) { throw 'archive refusal regression' }
+    if ($kind -eq 'positive' -and [System.IO.File]::ReadAllBytes((Join-Path $probe 'dir/file'))[0] -ne 42) { throw 'archive positive regression' }
+    Remove-Item -LiteralPath $probe -Recurse -Force
+    Remove-Item -LiteralPath $probeZip -Force
+  }
+  'STAGE public-archive-regressions PASS'
+}
+$base = Join-Path $env:SystemRoot ('System32\ci-kit-' + [guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Path $base
+Set-UserOnly $base $true
+$archive = Join-Path $base 'public.zip'
+$tree = Join-Path $base 'tool'
+$null = New-Item -ItemType Directory -Path $tree
+Set-UserOnly $tree $true
+$ownedConfig = $false
+$configDir = ''
+try {
+  Invoke-WebRequest -Uri ('https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/' + $asset[0]) -OutFile $archive -TimeoutSec 180
+  if ((Get-Item -LiteralPath $archive).Length -gt 256MB -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $asset[1]) { throw 'public archive digest' }
+  Test-ArchiveRefusals $base
+  Expand-VerifiedZip $archive $tree
   $git = Join-Path $tree 'cmd\git.exe'
   $pe = [System.IO.File]::ReadAllBytes($git)
   if ($pe.Length -lt 256 -or $pe[0] -ne 0x4d -or $pe[1] -ne 0x5a) { throw 'native public tool' }
