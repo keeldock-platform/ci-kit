@@ -82,8 +82,8 @@ func TestHostedRegisteredSignature(t *testing.T) {
 	if err != nil || ce != nil {
 		t.Fatal("PUBLIC_VERIFY signers write")
 	}
-	args := []string{git, "--no-replace-objects", "-c", "trace2.eventTarget=1", "-c", "core.hooksPath=" + os.DevNull, "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "diff.external=", "-C", fixture, "-c", "gpg.format=ssh", "-c", "gpg.ssh.program=" + ssh, "-c", "gpg.program=false", "-c", "gpg.x509.program=false", "-c", "gpg.ssh.allowedSignersFile=" + allowedPath, "-c", "gpg.ssh.revocationFile=", "-c", "gpg.minTrustLevel=fully", "verify-commit", tip}
-	result, runErr := process.Run(ctx, process.Spec{Argv: args, Root: fixture, Cwd: ".", ResultDir: filepath.Join(temp, "public-verify"), Timeout: 30 * time.Second, OutputLimit: 65536, Env: map[string]string{"PATH": filepath.Dir(git)}})
+	args := []string{git, "--no-replace-objects", "-c", "core.hooksPath=" + os.DevNull, "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "diff.external=", "-C", fixture, "-c", "gpg.format=ssh", "-c", "gpg.ssh.program=" + ssh, "-c", "gpg.program=false", "-c", "gpg.x509.program=false", "-c", "gpg.ssh.allowedSignersFile=" + allowedPath, "-c", "gpg.ssh.revocationFile=", "-c", "gpg.minTrustLevel=fully", "verify-commit", tip}
+	result, runErr := process.Run(ctx, process.Spec{Argv: args, Root: fixture, Cwd: ".", ResultDir: filepath.Join(temp, "public-verify"), Timeout: 30 * time.Second, OutputLimit: 65536, Env: map[string]string{"PATH": filepath.Dir(git), "GIT_TRACE2_EVENT": "1"}})
 	if runErr != nil || result.ExitCode != 0 {
 		for _, stream := range []struct{ name, path string }{{"STDOUT", result.StdoutPath}, {"STDERR", result.StderrPath}} {
 			capture, openErr := os.Open(stream.path)
@@ -101,6 +101,15 @@ func TestHostedRegisteredSignature(t *testing.T) {
 			t.Logf("PUBLIC_VERIFY_%s %s", stream.name, raw)
 		}
 		t.Fatalf("PUBLIC_VERIFY native result code=%d timeout=%t cleanup=%t", result.ExitCode, result.TimedOut, result.CleanupComplete)
+	}
+	traceFile, traceErr := os.Open(result.StderrPath)
+	if traceErr != nil {
+		t.Fatal("PUBLIC_VERIFY trace capture unavailable")
+	}
+	trace, traceErr := io.ReadAll(io.LimitReader(traceFile, 65537))
+	traceFile.Close()
+	if traceErr != nil || len(trace) > 65536 || !strings.Contains(string(trace), `"event":"child_start"`) {
+		t.Fatal("PUBLIC_VERIFY native child trace missing")
 	}
 	t.Log("PUBLIC_VERIFY native PASS")
 	if err := VerifySignaturesWithAuthority(ctx, fixture, tip, tip, SignerAuthority{root, tip}); err != nil {

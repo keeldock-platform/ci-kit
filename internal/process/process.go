@@ -88,7 +88,7 @@ func environmentFor(extra map[string]string, windows bool) ([]string, error) {
 			env[key(k)] = v
 		}
 	}
-	fixed := map[string]string{"CARGO_NET_OFFLINE": "true", "RUSTUP_AUTO_INSTALL": "0", "npm_config_offline": "true", "npm_config_update_notifier": "false", "NPM_CONFIG_AUDIT": "false", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1", "NX_DAEMON": "false", "NX_CACHE_PROJECT_GRAPH": "false", "NX_NO_CLOUD": "true", "NX_SKIP_NX_CACHE": "true", "NX_INTERACTIVE": "false", "NX_NATIVE_COMMAND_RUNNER": "false", "NX_LOAD_DOT_ENV_FILES": "false", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.DevNull, "GIT_TERMINAL_PROMPT": "0"}
+	fixed := map[string]string{"GIT_TRACE2_EVENT": "1", "CARGO_NET_OFFLINE": "true", "RUSTUP_AUTO_INSTALL": "0", "npm_config_offline": "true", "npm_config_update_notifier": "false", "NPM_CONFIG_AUDIT": "false", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1", "NX_DAEMON": "false", "NX_CACHE_PROJECT_GRAPH": "false", "NX_NO_CLOUD": "true", "NX_SKIP_NX_CACHE": "true", "NX_INTERACTIVE": "false", "NX_NATIVE_COMMAND_RUNNER": "false", "NX_LOAD_DOT_ENV_FILES": "false", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.DevNull, "GIT_TERMINAL_PROMPT": "0"}
 	for k, v := range extra {
 		if k == "KD_CI_SIMULATOR_UDID" || k == "ANDROID_SERIAL" {
 			if !validDevice(k, v) {

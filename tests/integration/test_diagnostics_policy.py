@@ -31,7 +31,8 @@ class DiagnosticsPolicy(unittest.TestCase):
         self.assertIn('"clone", "--no-hardlinks", "--no-checkout", root, fixture',public_test)
         self.assertNotIn('SOURCE_READ',public_test)
         self.assertNotIn('SOURCE_MAP',public_test)
-        self.assertIn('trace2.eventTarget=1',public_test)
+        self.assertNotIn('trace2.eventTarget=1',public_test)
+        self.assertIn('"GIT_TRACE2_EVENT": "1"',public_test)
         # Test oracle proves a source-reading addition is refused.
         malicious=executable+'\nSOURCE_READ_01=secret\n'
         self.assertTrue(any(s in malicious for s in ('SOURCE_READ','SOURCE_MAP')))

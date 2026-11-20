@@ -37,15 +37,29 @@ type androidState struct {
 }
 
 func androidReady(ctx context.Context, run packs.Execute) error {
-	st, e := os.Stat("/dev/kvm")
-	if e != nil || st.Mode()&os.ModeDevice == 0 {
-		return refused
+	return androidReadyAt(ctx, "/dev/kvm")
+}
+func androidReadyAt(ctx context.Context, device string) (err error) {
+	defer func() {
+		if err != nil {
+			process.RetainAttempt(ctx, process.Spec{Argv: []string{"android-kvm-readiness", device}, Root: filepath.Dir(device), Cwd: "."}, err)
+		}
+	}()
+	st, err := os.Stat(device)
+	if err != nil {
+		return fmt.Errorf("Android KVM stat: %w", err)
 	}
-	f, e := os.OpenFile("/dev/kvm", os.O_RDWR, 0)
-	if e != nil {
-		return refused
+	if st.Mode()&os.ModeDevice == 0 {
+		return fmt.Errorf("Android KVM path is not a device: %s", device)
 	}
-	return f.Close()
+	f, err := os.OpenFile(device, os.O_RDWR, 0)
+	if err != nil {
+		return fmt.Errorf("Android KVM open: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("Android KVM close: %w", err)
+	}
+	return nil
 }
 func runAndroid(ctx context.Context, root, private string, units []catalog.Unit, origins map[string]string, selected []planner.Invocation, admission bool, support packs.AndroidSupport, index *int) (code int) {
 	phase := 1
