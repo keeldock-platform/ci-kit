@@ -8,13 +8,14 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestExperimentDiagnosticReaderBindsCallerBranchSourceAndAttempt(t *testing.T) {
-	for _, change := range []string{"valid", "branch", "attempt", "source", "caller"} {
+	for _, change := range []string{"valid", "branch", "attempt", "source", "caller", "windows-valid", "windows-missing-job", "windows-extra-job", "windows-request-platforms", "windows-one-platform", "windows-duplicate-platform", "windows-other-platform"} {
 		t.Run(change, func(t *testing.T) {
 			x := fixture()
 			x.Registration.Concern = "canary"
@@ -23,6 +24,12 @@ func TestExperimentDiagnosticReaderBindsCallerBranchSourceAndAttempt(t *testing.
 			x.Registration.Caller.WorkflowPath = ".github/workflows/devlane-synthetic.yml"
 			x.Registration.Caller.Actor = "Moh-Bakr"
 			x.Registration.Platforms = append([]string{}, experimentPlatforms...)
+			if strings.HasPrefix(change, "windows-") {
+				x.Registration.Platforms = []string{"windows-x64", "windows-arm64"}
+			}
+			selected := append([]string{}, x.Registration.Platforms...)
+			slices.Sort(selected)
+			x.Dispatch.Inputs["platforms"] = strings.Join(selected, ",")
 			x.Dispatch.Inputs["concern"] = "canary"
 			x.Dispatch.Inputs["purpose"] = "feedback"
 			branch := "experiment/ci-diagnostics-fixture"
@@ -41,6 +48,9 @@ func TestExperimentDiagnosticReaderBindsCallerBranchSourceAndAttempt(t *testing.
 			if change == "source" {
 				request["source_sha"] = strings.Repeat("f", 40)
 			}
+			if change == "windows-request-platforms" {
+				request["platforms"] = "windows-x64"
+			}
 			requestRaw, _ := json.Marshal(request)
 			workflow, _ := json.Marshal(map[string]any{"jobs": map[string]any{"matrix": map[string]any{"uses": "keeldock-platform/ci-kit/.github/workflows/experiment-matrix.yml@" + x.Registration.KitSHA, "with": map[string]any{"kit_sha": x.Registration.KitSHA, "request": string(requestRaw)}}}})
 			if change == "branch" {
@@ -53,12 +63,24 @@ func TestExperimentDiagnosticReaderBindsCallerBranchSourceAndAttempt(t *testing.
 				run.Repository.ID++
 			}
 			jobs := []any{map[string]any{"run_id": 4, "run_attempt": 1, "id": 1, "name": "matrix / bootstrap", "status": "completed", "conclusion": "success"}}
-			for i, p := range experimentPlatforms {
+			for i, p := range x.Registration.Platforms {
 				conclusion := "success"
 				if i == 0 {
 					conclusion = "failure"
 				}
 				jobs = append(jobs, map[string]any{"run_id": 4, "run_attempt": 1, "id": i + 2, "name": "matrix / pack-" + p, "status": "completed", "conclusion": conclusion, "steps": []any{map[string]any{"name": "Execute", "conclusion": conclusion}}})
+			}
+			switch change {
+			case "windows-missing-job":
+				jobs = jobs[:len(jobs)-1]
+			case "windows-extra-job":
+				jobs = append(jobs, map[string]any{"run_id": 4, "run_attempt": 1, "id": 9, "name": "matrix / pack-ios-simulator", "status": "completed", "conclusion": "success"})
+			case "windows-one-platform":
+				receipt.Expectation.Registration.Platforms = []string{"windows-x64"}
+			case "windows-duplicate-platform":
+				receipt.Expectation.Registration.Platforms = []string{"windows-x64", "windows-x64"}
+			case "windows-other-platform":
+				receipt.Expectation.Registration.Platforms = []string{"windows-x64", "ios-simulator"}
 			}
 			var archive bytes.Buffer
 			z := zip.NewWriter(&archive)
@@ -75,7 +97,7 @@ func TestExperimentDiagnosticReaderBindsCallerBranchSourceAndAttempt(t *testing.
 				case strings.Contains(r.URL.Path, "/contents/"):
 					return reply(200, map[string]any{"encoding": "base64", "content": base64.StdEncoding.EncodeToString(workflow)}), nil
 				case strings.HasSuffix(r.URL.Path, "/jobs"):
-					return reply(200, map[string]any{"total_count": 5, "jobs": jobs}), nil
+					return reply(200, map[string]any{"total_count": len(jobs), "jobs": jobs}), nil
 				case strings.HasSuffix(r.URL.Path, "/zip"):
 					return &http.Response{StatusCode: 302, Header: http.Header{"Location": []string{"https://fixture.blob.core.windows.net/file"}}, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
 				case strings.HasSuffix(r.URL.Path, "/artifacts"):
@@ -101,10 +123,10 @@ func TestExperimentDiagnosticReaderBindsCallerBranchSourceAndAttempt(t *testing.
 				}
 				return nil
 			})
-			if change == "valid" && (e != nil || visits != 1 || reads != 6) {
+			if (change == "valid" || change == "windows-valid") && (e != nil || visits != 1 || reads != 6) {
 				t.Fatalf("valid experiment evidence refused: %v reads=%d visits=%d", e, reads, visits)
 			}
-			if change != "valid" && (e == nil || visits != 0) {
+			if change != "valid" && change != "windows-valid" && (e == nil || visits != 0) {
 				t.Fatal("unbound experiment evidence accepted")
 			}
 		})

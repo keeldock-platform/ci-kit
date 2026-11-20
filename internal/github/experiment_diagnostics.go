@@ -26,7 +26,7 @@ var experimentPlatforms = []string{"windows-x64", "windows-arm64", "ios-simulato
 func (c *Client) ExperimentDiagnostics(ctx context.Context, receipt ExperimentDiagnosticReceipt, visit func(string, []byte) error) error {
 	x := receipt.Expectation
 	r := x.Registration
-	if !regexp.MustCompile(`^experiment/ci-[a-z0-9][a-z0-9-]{0,63}$`).MatchString(receipt.Branch) || x.SchemaVersion != 1 || r.Concern != "canary" || r.Caller.Repository != "keeldock-platform/platform-ci" || r.Caller.ID != 1430960557 || r.Caller.WorkflowPath != ".github/workflows/devlane-synthetic.yml" || r.Caller.Actor != "Moh-Bakr" || !protocol.Numeric(r.Caller.WorkflowID) || !protocol.Numeric(x.RunID) || x.Attempt < 1 || !protocol.SHA(r.ControlSHA) || !protocol.SHA(r.KitSHA) || !protocol.SHA(x.Dispatch.Inputs["source_sha"]) || x.Dispatch.Inputs["concern"] != "canary" || x.Dispatch.Inputs["purpose"] != "feedback" || len(r.Platforms) != 4 {
+	if !regexp.MustCompile(`^experiment/ci-[a-z0-9][a-z0-9-]{0,63}$`).MatchString(receipt.Branch) || x.SchemaVersion != 1 || r.Concern != "canary" || r.Caller.Repository != "keeldock-platform/platform-ci" || r.Caller.ID != 1430960557 || r.Caller.WorkflowPath != ".github/workflows/devlane-synthetic.yml" || r.Caller.Actor != "Moh-Bakr" || !protocol.Numeric(r.Caller.WorkflowID) || !protocol.Numeric(x.RunID) || x.Attempt < 1 || !protocol.SHA(r.ControlSHA) || !protocol.SHA(r.KitSHA) || !protocol.SHA(x.Dispatch.Inputs["source_sha"]) || x.Dispatch.Inputs["concern"] != "canary" || x.Dispatch.Inputs["purpose"] != "feedback" || (len(r.Platforms) != 4 && len(r.Platforms) != 2) {
 		return Fail(3, "policy_refused")
 	}
 	seen := map[string]bool{}
@@ -35,6 +35,16 @@ func (c *Client) ExperimentDiagnostics(ctx context.Context, receipt ExperimentDi
 			return Fail(3, "policy_refused")
 		}
 		seen[p] = true
+	}
+	// This experiment has two reviewed matrix shapes: all native arms or the
+	// Windows pair. Bind the selected shape to the immutable caller request.
+	if len(r.Platforms) == 2 && (!seen["windows-x64"] || !seen["windows-arm64"]) {
+		return Fail(3, "policy_refused")
+	}
+	selected := append([]string{}, r.Platforms...)
+	slices.Sort(selected)
+	if x.Dispatch.Inputs["platforms"] != strings.Join(selected, ",") {
+		return Fail(3, "policy_refused")
 	}
 	run, e := c.ReadRun(ctx, r, x.RunID)
 	if e != nil {
@@ -89,7 +99,7 @@ func (c *Client) ExperimentDiagnostics(ctx context.Context, receipt ExperimentDi
 	if _, e = c.Request(ctx, "GET", path, nil, &jobs); e != nil {
 		return e
 	}
-	if jobs.Total != 5 || len(jobs.Jobs) != 5 {
+	if jobs.Total != len(r.Platforms)+1 || len(jobs.Jobs) != len(r.Platforms)+1 {
 		return Fail(6, "missing_evidence")
 	}
 	observed := map[string]bool{}
