@@ -5,6 +5,12 @@ const fs = require('node:fs');
 const net = require('node:net');
 const {execFileSync} = require('node:child_process');
 const manager = require('../../../public-android-tool/lib/emulator-manager.js');
+const requireVacantPort = () => new Promise((resolve, reject) => {
+  const socket = net.connect({host:'127.0.0.1', port:5554});
+  socket.setTimeout(1000, () => {socket.destroy(); reject(Error('public port timeout'));});
+  socket.on('connect', () => {socket.destroy(); reject(Error('existing emulator'));});
+  socket.on('error', error => error.code === 'ECONNREFUSED' ? resolve() : reject(error));
+});
 (async () => {
   const sdk = process.env.ANDROID_HOME;
   if (!path.isAbsolute(sdk || '') || !path.isAbsolute(process.env.HOME || '')) throw Error('public SDK root');
@@ -12,12 +18,7 @@ const manager = require('../../../public-android-tool/lib/emulator-manager.js');
   process.env.PATH = [path.join(sdk, 'cmdline-tools/latest/bin'), path.join(sdk, 'platform-tools'), process.env.PATH].join(path.delimiter);
   const name = 'public-api36-probe';
   if (fs.existsSync(path.join(process.env.ANDROID_AVD_HOME, name + '.avd')) || fs.existsSync(path.join(process.env.ANDROID_AVD_HOME, name + '.ini'))) throw Error('existing public AVD');
-  await new Promise((resolve, reject) => {
-    const socket = net.connect({host:'127.0.0.1', port:5554});
-    socket.setTimeout(1000, () => {socket.destroy(); reject(Error('public port timeout'));});
-    socket.on('connect', () => {socket.destroy(); reject(Error('existing emulator'));});
-    socket.on('error', error => error.code === 'ECONNREFUSED' ? resolve() : reject(error));
-  });
+  await requireVacantPort();
   let created = false, launched = false;
   try {
     created = true;
@@ -30,6 +31,7 @@ const manager = require('../../../public-android-tool/lib/emulator-manager.js');
       execFileSync(path.join(sdk, 'platform-tools/adb'), ['-s', 'emulator-5554', 'wait-for-disconnect'], {stdio:'inherit', timeout:30000});
     }
     if (created) execFileSync(path.join(sdk, 'cmdline-tools/latest/bin/avdmanager'), ['delete', 'avd', '-n', name], {stdio:'inherit', timeout:30000});
+    if (launched) await requireVacantPort();
   }
   console.log('STAGE public-android PASS');
 })().catch(error => {console.error(error); process.exitCode = 1;});
