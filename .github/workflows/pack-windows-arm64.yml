@@ -182,7 +182,8 @@ jobs:
         run: |
           set -euo pipefail
           msvc_bin="$(cygpath -u "$CI_MSVC_BIN")"
-          export PATH="$msvc_bin:$PATH"
+          archive_bin="$(cygpath -u "$CI_WINDOWS_ARCHIVE_BIN")"
+          export PATH="$msvc_bin:$archive_bin:$PATH"
           hash -r
           "$RUNNER_TEMP/ci-kit"
       - name: Owned native tool cleanup

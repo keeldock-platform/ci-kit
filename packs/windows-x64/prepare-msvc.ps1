@@ -28,12 +28,20 @@ $pe = [BitConverter]::ToInt32($bytes, 0x3c)
 $machine = [BitConverter]::ToUInt16($bytes, $pe + 4)
 $expected = if ($arch -eq 'arm64') { 0xaa64 } else { 0x8664 }
 if ($machine -ne $expected) { throw 'MSVC linker machine differs from native host' }
-$env:PATH = "$bin;$env:PATH"
+# Git Bash's GNU tar treats drive-letter archive paths as remote host syntax.
+# Keep the OS archive utility before Git's usr/bin while retaining MSVC first.
+$archiveBin = Join-Path $env:SystemRoot 'System32'
+$archive = Join-Path $archiveBin 'tar.exe'
+if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Native archive utility missing' }
+$archiveVersion = & $archive --version
+if ($LASTEXITCODE -ne 0 -or $archiveVersion -notmatch '^bsdtar ') { throw 'Native archive utility unavailable' }
+$env:PATH = "$bin;$archiveBin;$env:PATH"
 $selected = (Get-Command link.exe -CommandType Application | Select-Object -First 1).Source
 if ($selected -ine $link) { throw 'link resolves outside native MSVC tools' }
 $target = if ($arch -eq 'arm64') { 'AARCH64' } else { 'X86_64' }
 $values = @{
     'CI_MSVC_BIN' = $bin
+    'CI_WINDOWS_ARCHIVE_BIN' = $archiveBin
     "CARGO_TARGET_${target}_PC_WINDOWS_MSVC_LINKER" = $link
     'PATH' = $env:PATH
     'LIB' = $env:LIB
