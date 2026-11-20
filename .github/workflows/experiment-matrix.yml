@@ -149,6 +149,7 @@ jobs:
           node public-control/fixtures/synthetic/android-bundle.cjs
           sudo setfacl -m "u:$(id -un):rw" /dev/kvm
           node public-control/fixtures/synthetic/android-support.cjs
+          node public-control/fixtures/synthetic/android-public.cjs
       - name: Synthetic secrets ready
         shell: bash
         env:
