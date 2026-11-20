@@ -35,3 +35,20 @@ func TestCredentialProtocolRejectsWrongOriginPathMalformedAndEmpty(t *testing.T)
 		})
 	}
 }
+
+func TestCredentialProtocolIgnoresRepeatedMetadataWithoutRelaxingOrigin(t *testing.T) {
+	env := credentialEnv(t)
+	prefix := "capability[]=authtype\ncapability[]=state\nwwwauth[]=Basic realm=fixture\nwwwauth[]=Bearer realm=fixture\nstate[]=one\nstate[]=two\n"
+	origin := "protocol=https\nhost=github.com\npath=sample-owner/sample-source.git\n"
+	var out bytes.Buffer
+	get := func(k string) string { return env[k] }
+	if ServeCredential(strings.NewReader(prefix+origin+"\n"), &out, get) != nil || !strings.Contains(out.String(), "password="+env["SOURCE_READ_01"]) {
+		t.Fatal("documented multi-value metadata refused")
+	}
+	for _, extra := range []string{"host=github.com\n", "protocol=https\n", "path=sample-owner/sample-source.git\n"} {
+		out.Reset()
+		if ServeCredential(strings.NewReader(prefix+origin+extra+"\n"), &out, get) == nil || out.Len() != 0 {
+			t.Fatal("duplicate authority disclosed credential")
+		}
+	}
+}
