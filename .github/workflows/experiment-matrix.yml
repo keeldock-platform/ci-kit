@@ -96,6 +96,15 @@ jobs:
         if: startsWith(matrix.platform, 'windows-')
         shell: pwsh
         run: ./public-control/fixtures/synthetic/windows-tools.ps1
+      - name: Windows x64 MSVC environment
+        if: matrix.platform == 'windows-x64'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+      - name: Windows native MSVC binding
+        if: startsWith(matrix.platform, 'windows-')
+        shell: pwsh
+        run: ./public-control/fixtures/synthetic/windows-msvc.ps1
       - name: Windows public Rust preparation
         if: startsWith(matrix.platform, 'windows-')
         shell: bash
@@ -107,10 +116,14 @@ jobs:
       - name: Source-free boundary regressions
         shell: bash
         run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            export PATH="$(cygpath -u "$CI_MSVC_BIN"):$PATH"
+            hash -r
+          fi
           cd public-control
           node --test fixtures/synthetic/rust/cargo-check.test.mjs
           if [[ "$RUNNER_OS" == Windows ]]; then
-            CI_PUBLIC_WINDOWS_RUST_SMOKE=1 go test -count=1 -v -mod=readonly ./internal/process -run '^TestHostedWindowsRustSmoke$'
+            CI_PUBLIC_WINDOWS_RUST_SMOKE=1 go test -count=1 -v -mod=readonly ./internal/process -run 'TestHostedWindowsRustSmoke|TestWindowsLinkerRejectsGitCoreutils'
           fi
           go test -count=1 -v -mod=readonly ./internal/collector
           CI_REGISTERED_SIGNATURE_SMOKE=1 go test -count=1 -v -mod=readonly ./internal/github -run '^TestHostedRegisteredSignature$'
@@ -165,6 +178,10 @@ jobs:
           SOURCE_MAP: ${{ secrets.CI_SYNTHETIC_SOURCE_MAP }}
           SOURCE_READ_01: ${{ secrets.SYNTHETIC_SOURCE_TOKEN }}
         run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            export PATH="$(cygpath -u "$CI_MSVC_BIN"):$PATH"
+            hash -r
+          fi
           set +e
           "$RUNNER_TEMP/ci-kit"
           code=$?
