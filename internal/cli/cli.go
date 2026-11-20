@@ -72,7 +72,7 @@ func Execute(ctx context.Context, args []string, out, errout io.Writer) int {
 }
 func takesFlagValue(name string) bool {
 	switch name {
-	case "config", "color", "http-timeout", "base", "sha", "unit", "platform", "mode", "deadline", "variant", "shard", "check", "concern", "request-id", "attempt", "older-than", "private-report", "private-output":
+	case "config", "color", "http-timeout", "base", "sha", "unit", "platform", "mode", "deadline", "variant", "shard", "check", "concern", "request-id", "attempt", "older-than", "experiment-receipt", "private-bundle", "identity", "private-report", "private-output":
 		return true
 	}
 	return false

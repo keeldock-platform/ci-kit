@@ -137,6 +137,7 @@ jobs:
         with:
           kit-sha: ${{ inputs.kit_sha }}
       - name: Execute
+        id: execute
         shell: bash
         env:
           SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
@@ -173,3 +174,12 @@ jobs:
           SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
           SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
         run: '"$RUNNER_TEMP/ci-kit"'
+      - name: Encrypted failure diagnostics
+        if: ${{ failure() && steps.execute.outputs.diagnostics == 'ready' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnostics-linux-debian-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-diagnostics/failure-linux-debian-${{ github.run_attempt }}.age
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0

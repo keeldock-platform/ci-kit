@@ -890,3 +890,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+
+Failure diagnostic encryption: filippo.io/age v1.3.2 (BSD-3-Clause),
+filippo.io/hpke v0.4.0 (BSD-3-Clause), golang.org/x/crypto v0.55.0 (BSD-3-Clause).
+Upstream: https://github.com/FiloSottile/age/releases/tag/v1.3.2

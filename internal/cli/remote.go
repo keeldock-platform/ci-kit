@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/keeldock-platform/ci-kit/internal/catalog"
 	"github.com/keeldock-platform/ci-kit/internal/config"
+	"github.com/keeldock-platform/ci-kit/internal/diagnostics"
 	gh "github.com/keeldock-platform/ci-kit/internal/github"
 	"github.com/keeldock-platform/ci-kit/internal/planner"
 	"github.com/keeldock-platform/ci-kit/internal/protocol"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -57,7 +59,6 @@ func (a *app) dispatch() *cobra.Command {
 		if e != nil {
 			return e
 		}
-		opts.AdmittedOnly = true
 		opts.Admission = admission
 		opts.Qualified = reg.Qualified
 		if admission && !reg.Qualified {
@@ -206,7 +207,7 @@ func (a *app) dispatch() *cobra.Command {
 	return c
 }
 func (a *app) remote(name string) *cobra.Command {
-	var concern, privateReport, privateOutput string
+	var concern, privateReport, privateOutput, privateBundle, diagnosticKey, experimentReceipt string
 	var attempt int
 	var deadline time.Duration
 	def := 2 * time.Hour
@@ -214,14 +215,29 @@ func (a *app) remote(name string) *cobra.Command {
 		def = 5 * time.Minute
 	}
 	c := &cobra.Command{Use: name + " RUN_ID", Short: "Observe a registered run tuple", Args: func(c *cobra.Command, args []string) error {
-		if name == "failures" && (privateReport != "" || privateOutput != "") {
+		if name == "failures" && experimentReceipt != "" {
+			return cobra.ExactArgs(1)(c, args)
+		}
+		if name == "failures" && (privateReport != "" || privateBundle != "" || privateOutput != "" && len(args) == 0) {
 			return cobra.NoArgs(c, args)
 		}
 		return cobra.ExactArgs(1)(c, args)
 	}, RunE: func(c *cobra.Command, args []string) error {
-		if name == "failures" && (privateReport != "" || privateOutput != "") {
+		if name == "failures" && experimentReceipt != "" {
+			if concern != "" || privateBundle != "" || privateReport != "" {
+				return gh.Fail(2, "usage")
+			}
+			return a.experimentFailureFiles(args[0], experimentReceipt, diagnosticKey, privateOutput, attempt)
+		}
+		if name == "failures" && (privateReport != "" || privateBundle != "" || privateOutput != "" && len(args) == 0) {
 			if concern != "" || attempt != 0 {
 				return gh.Fail(2, "usage")
+			}
+			if privateBundle != "" {
+				if privateReport != "" {
+					return gh.Fail(2, "usage")
+				}
+				return a.privateBundle(privateBundle, diagnosticKey, privateOutput)
 			}
 			return a.privateFailures(privateReport, privateOutput)
 		}
@@ -301,6 +317,33 @@ func (a *app) remote(name string) *cobra.Command {
 			r, e = client.Cancel(ctx, x, Version, record)
 		}
 		a.result = r
+		if name == "failures" && e == nil && r.ExitCode == 1 {
+			if !diagnosticsLocal() {
+				return gh.Fail(3, "policy_refused")
+			}
+			failed := []string{}
+			for _, stage := range r.Stages {
+				if stage.State == "failed" && (stage.Slot == "checks" || stage.Slot == "plan") {
+					slot := stage.Slot
+					if stage.Platform != nil {
+						slot = *stage.Platform
+					}
+					failed = append(failed, slot)
+				}
+			}
+			output := privateOutput
+			if output == "" {
+				output = filepath.Join(dir, "failures-"+x.RunID+"-"+strconv.Itoa(x.Attempt)+".json")
+			}
+			expected := diagnostics.Identity{Run: x.RunID, Attempt: strconv.Itoa(x.Attempt), KitSHA: x.Registration.KitSHA, SourceSHA: x.Dispatch.Inputs["source_sha"]}
+			err := a.diagnosticReports(output, diagnosticKey, &expected, func(visit func(string, []byte) error) error {
+				return client.WalkDiagnosticArtifacts(ctx, x, failed, visit)
+			})
+			if err != nil {
+				return err
+			}
+
+		}
 		if e != nil && errors.Is(ctx.Err(), context.Canceled) {
 			return gh.Fail(7, "interrupted")
 		}
@@ -308,6 +351,9 @@ func (a *app) remote(name string) *cobra.Command {
 	}}
 	c.Flags().StringVar(&concern, "concern", "", "Approved concern alias")
 	if name == "failures" {
+		c.Flags().StringVar(&experimentReceipt, "experiment-receipt", "", "Read-only synthetic diagnostic receipt (never dispatches)")
+		c.Flags().StringVar(&privateBundle, "private-bundle", "", "Decrypt a recorded local age failure fixture")
+		c.Flags().StringVar(&diagnosticKey, "identity", "", "Coordinator age identity (local only)")
 		c.Flags().StringVar(&privateReport, "private-report", "", "Read a local user-only JUnit report")
 		c.Flags().StringVar(&privateOutput, "private-output", "", "Create a user-only file listing failed names and errors")
 	}

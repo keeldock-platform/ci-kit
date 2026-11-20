@@ -32,7 +32,7 @@ def check(root, paths, legacy, owner_text=None, role="kit"):
             continue  # Existing lane is preserved; no new legacy-path files are accepted.
         if name.startswith('.github/workflows/') and len(p.parts) != 3:
             failures.append('misplaced_file')
-        if name.startswith('.github/') and len(p.parts) == 2 and p.name not in {'README.md','CODEOWNERS','dependabot.yml','actionlint.yaml','zizmor.yml','zizmor.yaml','tool-pins.json'}:
+        if name.startswith('.github/') and len(p.parts) == 2 and p.name not in {'README.md','CODEOWNERS','dependabot.yml','actionlint.yaml','zizmor.yml','zizmor.yaml','tool-pins.json','diagnostics.json'}:
             failures.append('misplaced_file')
         if name.startswith('.github/actions/') and len(p.parts) > 4:
             failures.append('misplaced_file')

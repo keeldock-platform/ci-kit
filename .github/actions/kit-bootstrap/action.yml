@@ -136,6 +136,7 @@ runs:
         GOTOOLCHAIN: local
       run: |
         set -euo pipefail
+        trap 'code=$?; printf "PUBLIC_TOOL_FAILURE exit=%s os=%s arch=%s\n" "$code" "$RUNNER_OS" "$RUNNER_ARCH"; git --version; go version; node --version; exit "$code"' ERR
         test "$(git -C public-control rev-parse HEAD)" = "$CI_KIT_SHA"
         cd public-control
         npm ci --prefix planner --ignore-scripts --no-audit --no-fund
