@@ -117,7 +117,8 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == Windows ]]; then
-            export PATH="$(cygpath -u "$CI_MSVC_BIN"):$PATH"
+            PATH="$(cygpath -u "$CI_MSVC_BIN"):$PATH"
+            export PATH
             hash -r
           fi
           cd public-control
@@ -179,7 +180,8 @@ jobs:
           SOURCE_READ_01: ${{ secrets.SYNTHETIC_SOURCE_TOKEN }}
         run: |
           if [[ "$RUNNER_OS" == Windows ]]; then
-            export PATH="$(cygpath -u "$CI_MSVC_BIN"):$PATH"
+            PATH="$(cygpath -u "$CI_MSVC_BIN"):$PATH"
+            export PATH
             hash -r
           fi
           set +e
