@@ -8,14 +8,16 @@ $arch = switch ($env:CI_PLATFORM) {
 if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant() -ne $arch) {
     throw 'MSVC setup requires the native host architecture'
 }
-if ($arch -eq 'arm64') {
-    # Catalogue R15: native ARM64 uses the installed Microsoft Developer shell.
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-    $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
-    if ($LASTEXITCODE -ne 0 -or -not $vs) { throw 'Native ARM64 Visual Studio not found' }
-    $launch = Join-Path $vs 'Common7/Tools/Launch-VsDevShell.ps1'
-    & $launch -Arch arm64 -HostArch arm64 -SkipAutomaticLocation
-}
+# Use Microsoft's installed Developer PowerShell on both native hosts. The
+# repository action policy refuses the catalogue's third-party x64 action.
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+$component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.ARM64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
+$vs = & $vswhere -latest -products '*' -requires $component -property installationPath
+if ($LASTEXITCODE -ne 0 -or -not $vs) { throw 'Native Visual Studio not found' }
+$launch = Join-Path $vs 'Common7/Tools/Launch-VsDevShell.ps1'
+# Microsoft's Developer PowerShell names the x64 architecture amd64.
+$devArch = if ($arch -eq 'x64') { 'amd64' } else { 'arm64' }
+& $launch -Arch $devArch -HostArch $devArch -SkipAutomaticLocation
 if (-not $env:VCToolsInstallDir) { throw 'MSVC tools environment unavailable' }
 $bin = Join-Path $env:VCToolsInstallDir "bin/Host$arch/$arch"
 $link = Join-Path $bin 'link.exe'

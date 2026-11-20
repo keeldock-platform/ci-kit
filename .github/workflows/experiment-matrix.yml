@@ -96,11 +96,6 @@ jobs:
         if: startsWith(matrix.platform, 'windows-')
         shell: pwsh
         run: ./public-control/fixtures/synthetic/windows-tools.ps1
-      - name: Windows x64 MSVC environment
-        if: matrix.platform == 'windows-x64'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
-        with:
-          arch: x64
       - name: Windows native MSVC binding
         if: startsWith(matrix.platform, 'windows-')
         shell: pwsh
