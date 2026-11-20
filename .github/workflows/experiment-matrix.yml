@@ -72,6 +72,9 @@ jobs:
         with:
           kit-sha: ${{ inputs.kit_sha }}
           route: experiment
+      - name: Source-free hosted inventory
+        shell: bash
+        run: node public-control/fixtures/synthetic/probe.mjs
       - name: Source-free boundary regressions
         shell: bash
         run: |
@@ -86,7 +89,7 @@ jobs:
         id: execute
         shell: bash
         env:
-          SOURCE_MAP: ${{ vars.CI_EXPERIMENT_SOURCE_MAP }}
+          SOURCE_MAP: ${{ secrets.CI_SYNTHETIC_SOURCE_MAP }}
           SOURCE_READ_01: ${{ secrets.SYNTHETIC_SOURCE_TOKEN }}
         run: |
           set +e
