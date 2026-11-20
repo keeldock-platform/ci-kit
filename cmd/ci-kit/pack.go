@@ -112,6 +112,9 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 			return state
 		}
 		if result.ExitCode > 0 {
+			if experiment {
+				fmt.Printf("PACK_FAILURE_CLASS %d\n", syntheticFailureClass(result))
+			}
 			return 1
 		}
 		if err != nil || result.ExitCode != 0 || !result.CleanupComplete {

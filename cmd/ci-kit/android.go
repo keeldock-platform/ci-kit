@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -46,7 +47,13 @@ func androidReady(ctx context.Context, run packs.Execute) error {
 	}
 	return f.Close()
 }
-func runAndroid(ctx context.Context, root, private string, units []catalog.Unit, origins map[string]string, selected []planner.Invocation, admission bool, support packs.AndroidSupport, index *int) int {
+func runAndroid(ctx context.Context, root, private string, units []catalog.Unit, origins map[string]string, selected []planner.Invocation, admission bool, support packs.AndroidSupport, index *int) (code int) {
+	phase := 1
+	defer func() {
+		if code != 0 && diagnosticRequested(ctx) {
+			fmt.Printf("ANDROID_GATE %d\n", phase)
+		}
+	}()
 	wd, e := os.Getwd()
 	if e != nil {
 		return 6
@@ -61,7 +68,8 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 	if e != nil || strings.TrimSpace(string(out)) != "a421e43855164a8197daf9d8d40fe71c6996bb0d" {
 		return 3
 	}
-	for _, dir := range []string{bundle, filepath.Join(wd, "public-control")} {
+	for i, dir := range []string{bundle, filepath.Join(wd, "public-control")} {
+		phase = 2 + i
 		clean, e := host(ctx, []string{git, "-C", dir, "status", "--porcelain", "--untracked-files=all"}, ".", time.Minute, nil)
 		if e != nil || len(clean) != 0 {
 			return 3
@@ -75,6 +83,7 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 	if e != nil {
 		return 6
 	}
+	phase = 4
 	byVariant := map[string]packs.AndroidImage{}
 	for _, image := range support.Images {
 		byVariant[image.Variant] = image
@@ -97,6 +106,7 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 		}
 	}
 	for _, image := range support.Images {
+		phase = 5
 		if conn, err := net.DialTimeout("tcp", "127.0.0.1:5554", time.Second); err == nil {
 			conn.Close()
 			return 3
@@ -130,6 +140,7 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 			"INPUT_EMULATOR-OPTIONS": "-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel on", "INPUT_DISABLE-ANIMATIONS": "true", "INPUT_DISABLE-SPELLCHECKER": "true", "INPUT_DISABLE-LINUX-HW-ACCEL": "false", "INPUT_ENABLE-HW-KEYBOARD": "false",
 			"INPUT_EMULATOR-BUILD": support.EmulatorBuild, "INPUT_WORKING-DIRECTORY": root, "INPUT_NDK": support.NDK, "INPUT_CMAKE": support.CMake, "INPUT_CHANNEL": "stable", "INPUT_SCRIPT": "\"$CI_KIT_HELPER\" native-hook", "INPUT_PRE-EMULATOR-LAUNCH-SCRIPT": "", "CI_PACK_STATE": statePath, "CI_KIT_HELPER": helper,
 		}
+		phase = 6
 		sdk := os.Getenv("ANDROID_HOME")
 		if !filepath.IsAbs(sdk) {
 			return 3
@@ -140,9 +151,11 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 				prep[path] = digest
 			}
 		}
+		phase = 7
 		if packs.VerifySDKFiles(ctx, sdk, prep) != nil {
 			return 3
 		}
+		phase = 8
 		*index++
 		result, e := process.RunTool(ctx, process.Spec{Argv: []string{node, filepath.Join(wd, "public-control", "packs", "android-emulator", "lifecycle.cjs")}, Root: root, Cwd: ".", ResultDir: filepath.Join(private, "android-capture-"+strconv.Itoa(*index)), Timeout: 50 * time.Minute}, "android-emulator-runner", extra)
 		var hook struct {

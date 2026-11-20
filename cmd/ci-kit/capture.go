@@ -21,3 +21,18 @@ func syntheticCapture(source string, result process.Result) error {
 	}
 	return nil
 }
+
+func syntheticFailureClass(result process.Result) int {
+	for _, path := range []string{result.StderrPath, result.StdoutPath} {
+		raw, e := readRegular(path, 1<<20)
+		if e != nil {
+			continue
+		}
+		for i, pattern := range []string{"npm error code EACCES", "npm error code EUSAGE", "npm error code EINTEGRITY", "npm error code ENOTFOUND", "npm error code ETIMEDOUT", "npm error code EBADPLATFORM", "curl: (", "sha256sum: WARNING"} {
+			if bytes.Contains(raw, []byte(pattern)) {
+				return i + 1
+			}
+		}
+	}
+	return 0
+}

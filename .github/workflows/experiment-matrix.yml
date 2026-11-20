@@ -110,9 +110,17 @@ jobs:
         shell: bash
         run: |
           cd public-control
+          go test -mod=readonly -v ./internal/github -run '^TestHostedSignatureAssessment$' > "$RUNNER_TEMP/signature-assessment.log" 2>&1
+          grep 'PUBLIC_SIGNATURE_DIAGNOSTIC {' "$RUNNER_TEMP/signature-assessment.log" || true
           if go test -mod=readonly ./cmd/ci-kit -run 'TestSharedSyntheticEnvironmentStaysExperimentOnly|TestExperimentRouteIsSeparateAndSyntheticOnly' > "$RUNNER_TEMP/boundary-test.log" 2>&1; then
-            if go test -mod=readonly ./internal/github -run 'TestSignatureToolsIgnoreAmbientPathOrder|TestPublishedKitIncludesCurrentRevocationAuthority' > "$RUNNER_TEMP/signature-tool-test.log" 2>&1; then
+            if go test -mod=readonly ./internal/github -run '^TestSignatureToolsIgnoreAmbientPathOrder$' > "$RUNNER_TEMP/signature-tool-test.log" 2>&1; then
               echo 'STAGE signature-tools PASS'
+              if go test -mod=readonly ./internal/github -run '^TestPublishedKitIncludesCurrentRevocationAuthority$' > "$RUNNER_TEMP/signature-ledger-test.log" 2>&1; then
+                echo 'STAGE signature-ledger PASS'
+              else
+                echo 'STAGE signature-ledger FAIL'
+                exit 3
+              fi
             else
               echo 'STAGE signature-tools FAIL'
               exit 3
