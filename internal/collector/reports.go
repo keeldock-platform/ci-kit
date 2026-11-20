@@ -265,3 +265,41 @@ func ReportAssertions(data []byte, want []string) ([]string, error) {
 	}
 	return out, nil
 }
+
+// Failure is private diagnostic data, never a public result field.
+type Failure struct {
+	Test  string `json:"test"`
+	Error string `json:"error"`
+}
+
+func Failures(data []byte) ([]Failure, error) {
+	if len(data) == 0 || len(data) > MaxReport || !utf8.Valid(data) || safeXML(data) != nil {
+		return nil, ErrReports
+	}
+	suites, e := junit.Ingest(data)
+	if e != nil {
+		return nil, ErrReports
+	}
+	failures := []Failure{}
+	var walk func([]junit.Suite)
+	walk = func(suites []junit.Suite) {
+		for _, s := range suites {
+			for _, t := range s.Tests {
+				if t.Status == junit.StatusFailed || t.Status == junit.StatusError {
+					message := t.Message
+					if t.Error != nil {
+						message = strings.TrimSpace(t.Message + "\n" + t.Error.Error())
+					}
+					name := t.Name
+					if t.Classname != "" {
+						name = t.Classname + "/" + name
+					}
+					failures = append(failures, Failure{name, message})
+				}
+			}
+			walk(s.Suites)
+		}
+	}
+	walk(suites)
+	return failures, nil
+}

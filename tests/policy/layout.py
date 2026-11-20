@@ -11,7 +11,7 @@ import sys
 ROOT_FILES = {'README.md','CHANGELOG.md','LICENSE','go.mod','go.sum','package.json','package-lock.json','.gitignore','.gitattributes','.goreleaser.yaml','.goreleaser.yml','.ci-layout.json','NOTICE','THIRD_PARTY_NOTICES'}
 ROOT_DIRS = {'.github','cmd','internal','planner','packs','schemas','fixtures','tests','docs','kit','ci','core-ci'}
 LEGACY_REVISION = '17c2495a3860ec4ff1a85d257987f6515dbc0c98'
-NEW_WORKFLOWS = {'dispatch.yml','source-ci.yml','canary-ci.yml','pr-lint.yml','scheduled.yml','validate.yml','pack.yml','ci-policy.yml','cli-candidate.yml'}
+NEW_WORKFLOWS = {'experiment-ci.yml','experiment-matrix.yml','dispatch.yml','source-ci.yml','canary-ci.yml','pr-lint.yml','scheduled.yml','validate.yml','pack.yml','ci-policy.yml','cli-candidate.yml'}
 PLATFORMS = {'linux-debian','linux-arch','macos-arm64','macos-x64','windows-x64','windows-arm64','ios-simulator','android-emulator','web-linux','server-linux-x64','server-linux-arm64'}
 
 
@@ -32,7 +32,7 @@ def check(root, paths, legacy, owner_text=None, role="kit"):
             continue  # Existing lane is preserved; no new legacy-path files are accepted.
         if name.startswith('.github/workflows/') and len(p.parts) != 3:
             failures.append('misplaced_file')
-        if name.startswith('.github/') and len(p.parts) == 2 and p.name not in {'README.md','CODEOWNERS','dependabot.yml','actionlint.yaml','zizmor.yml','zizmor.yaml','tool-pins.json'}:
+        if name.startswith('.github/') and len(p.parts) == 2 and p.name not in {'README.md','CODEOWNERS','dependabot.yml','actionlint.yaml','zizmor.yml','zizmor.yaml','tool-pins.json','diagnostics.json'}:
             failures.append('misplaced_file')
         if name.startswith('.github/actions/') and len(p.parts) > 4:
             failures.append('misplaced_file')

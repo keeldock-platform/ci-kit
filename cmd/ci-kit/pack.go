@@ -96,8 +96,10 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 		if err != nil {
 			return 2
 		}
+		originalArgv := append([]string{}, argv...)
 		argv, err = absoluteExecutable(argv)
 		if err != nil {
+			process.RetainAttempt(runCtx, process.Spec{Argv: originalArgv, Root: source, Cwd: cwd}, err)
 			return 2
 		}
 		timeout := time.Duration(cmd.TimeoutSeconds) * time.Second
@@ -273,6 +275,13 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 					return 6
 				}
 			}
+			defer func() {
+				for _, rel := range check.Reports {
+					if path, err := reportPath(source, rel); err == nil {
+						process.RetainReport(unitCtx, path)
+					}
+				}
+			}()
 			for _, cmd := range inv.Commands {
 				if cmd.TimeoutSeconds < 0 {
 					return 2
@@ -404,7 +413,10 @@ func absoluteExecutable(argv []string) ([]string, error) {
 	}
 	if !filepath.IsAbs(argv[0]) {
 		path, e := exec.LookPath(argv[0])
-		if e != nil || !filepath.IsAbs(path) {
+		if e != nil {
+			return nil, e
+		}
+		if !filepath.IsAbs(path) {
 			return nil, refused
 		}
 		argv[0] = path
@@ -414,8 +426,10 @@ func absoluteExecutable(argv []string) ([]string, error) {
 func capturedExecutor(root, private string, index *int) packs.Execute {
 	return func(ctx context.Context, argv []string, cwd string, timeout time.Duration, env map[string]string) ([]byte, error) {
 		*index++
+		originalArgv := append([]string{}, argv...)
 		argv, e := absoluteExecutable(argv)
 		if e != nil {
+			process.RetainAttempt(ctx, process.Spec{Argv: originalArgv, Root: root, Cwd: cwd}, e)
 			return nil, refused
 		}
 		result, e := process.Run(ctx, process.Spec{Argv: argv, Root: root, Cwd: cwd, Env: env, ResultDir: filepath.Join(private, "venue-"+strconv.Itoa(*index)), Timeout: timeout})

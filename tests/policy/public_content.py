@@ -14,7 +14,7 @@ import unicodedata
 from urllib.parse import unquote
 
 MAX_FILE = 16 * 1024 * 1024
-MAX_COMMITS = 1000
+MAX_COMMITS = 4096  # Bound the complete retained public history, including legacy refs.
 
 
 def git(root, *args):

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestSignalExitRetained(t *testing.T) {
@@ -53,6 +54,13 @@ func TestExitedGroupTerminationRequiresEmptyProbe(t *testing.T) {
 		t.Fatal("fixture exit lost")
 	}
 	empty, probe := owner.empty()
+	// Darwin can retain an exited group briefly after Wait. Require the same
+	// independent empty probe as production cleanup, within a bounded deadline.
+	deadline := time.Now().Add(time.Second)
+	for probe == nil && !empty && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		empty, probe = owner.empty()
+	}
 	if probe != nil || !empty || !terminationConfirmed(hard, empty) {
 		t.Fatalf("exited group cleanup failed: signal=%v empty=%v probe=%v", hard, empty, probe)
 	}

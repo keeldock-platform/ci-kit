@@ -19,6 +19,7 @@ import (
 	"github.com/keeldock-platform/ci-kit/internal/config"
 	provider "github.com/keeldock-platform/ci-kit/internal/github"
 	"github.com/keeldock-platform/ci-kit/internal/planner"
+	"github.com/keeldock-platform/ci-kit/internal/process"
 	"github.com/keeldock-platform/ci-kit/internal/protocol"
 )
 
@@ -49,21 +50,8 @@ func execute(ctx context.Context) int {
 }
 func privateWork(ctx context.Context, c control) (code int) {
 	code = 6
-	raw := []byte(os.Getenv("SOURCE_MAP"))
-	sum := sha256.Sum256(raw)
-	if hex.EncodeToString(sum[:]) != c.Concern.SourceMapSHA256 {
-		return 3
-	}
-	m, e := acquire.ParseMap(raw, c.Request.Inputs["concern"])
-	if e != nil || os.Getenv("SOURCE_READ_01") == "" || experimentRequest(c.Request) && (len(m.Sources) != 1 || m.Root != "canary") {
-		return 3
-	}
-	git, e := exec.LookPath("git")
-	if e != nil || !filepath.IsAbs(git) {
-		return 2
-	}
-	helper, e := os.Executable()
-	if e != nil {
+	recipient, err := diagnosticRecipient()
+	if err != nil {
 		return 6
 	}
 	parent := os.Getenv("RUNNER_TEMP")
@@ -87,6 +75,41 @@ func privateWork(ctx context.Context, c control) (code int) {
 			code = 1
 		}
 	}()
+	sink := filepath.Join(private, "diagnostics")
+	if process.MakePrivateDir(sink) != nil {
+		return 6
+	}
+	ctx = process.WithCaptureSink(ctx, sink)
+	stage := "source map and tool resolution"
+	defer func() {
+		if code != 0 {
+			process.RetainAttempt(ctx, process.Spec{Argv: []string{"ci-kit", stage}, Root: private, Cwd: "."}, fmt.Errorf("private stage failed with exit %d", code))
+			if sealFailure(sink, recipient, c, code) == nil {
+				if output(map[string]string{"diagnostics": "ready"}) != nil {
+					fmt.Println("DIAGNOSTICS FAIL")
+				}
+			} else {
+				fmt.Println("DIAGNOSTICS FAIL")
+			}
+		}
+	}()
+	raw := []byte(os.Getenv("SOURCE_MAP"))
+	sum := sha256.Sum256(raw)
+	if hex.EncodeToString(sum[:]) != c.Concern.SourceMapSHA256 {
+		return 3
+	}
+	m, e := acquire.ParseMap(raw, c.Request.Inputs["concern"])
+	if e != nil || os.Getenv("SOURCE_READ_01") == "" || experimentRequest(c.Request) && (len(m.Sources) != 1 || m.Root != "canary") {
+		return 3
+	}
+	git, e := exec.LookPath("git")
+	if e != nil || !filepath.IsAbs(git) {
+		return 2
+	}
+	helper, e := os.Executable()
+	if e != nil {
+		return 6
+	}
 	req := acquire.Request{Map: m, RootSHA: c.Request.Inputs["source_sha"], BaseSHA: c.Request.Inputs["base_sha"], Workspace: filepath.Join(private, "source"), Git: git, CredentialHelper: helper}
 	req.VerifyRepository = func(ctx context.Context, s acquire.Source) (err error) {
 		if experimentRequest(c.Request) {
@@ -107,7 +130,11 @@ func privateWork(ctx context.Context, c control) (code int) {
 			FullName string `json:"full_name"`
 			Fork     bool   `json:"fork"`
 		}
-		_, e = client.Request(ctx, "GET", "repos/"+s.Owner+"/"+s.Repository, nil, &meta)
+		status, requestErr := client.Request(ctx, "GET", "repos/"+s.Owner+"/"+s.Repository, nil, &meta)
+		e = requestErr
+		if e != nil || status != 200 {
+			process.RetainAttempt(ctx, process.Spec{Argv: []string{"github-api", "GET", "repos/" + s.Owner + "/" + s.Repository}, Root: private, Cwd: "."}, fmt.Errorf("repository metadata request failed: HTTP %d: %v", status, e))
+		}
 		if e != nil || meta.ID != s.RepositoryID || meta.FullName != s.Owner+"/"+s.Repository || meta.Fork {
 			return refused
 		}
@@ -169,6 +196,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 	if experiment {
 		fmt.Println("STAGE checkout START")
 	}
+	stage = "source acquisition"
 	checkout, e := acquire.Acquire(ctx, req)
 	if e != nil || compositionDigest == "" {
 		return 3
@@ -194,6 +222,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 		}
 		sources[alias] = catalog.CompositionSource{Root: path, SHA: sha}
 	}
+	stage = "catalogue validation"
 	units, origins, e := catalog.LoadCompositionAt(ctx, sources, git)
 	if e != nil {
 		return 2
@@ -226,6 +255,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 			opts.Executables[name] = path
 		}
 	}
+	stage = "planning"
 	plan, e := planner.Plan(root, units, opts)
 	if e != nil {
 		return 2
@@ -292,6 +322,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 	if len(selected) == 0 {
 		return 6
 	}
+	stage = "pack execution"
 	return runPack(ctx, root, private, platform, units, origins, selected, opts.Admission)
 }
 func readRegular(path string, max int64) ([]byte, error) {

@@ -1,21 +1,255 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "$id":"urn:keeldock:kd-ci:local-data:1",
-  "$defs":{
-    "strings":{"type":"array","uniqueItems":true,"items":{"type":"string"}},
-    "version":{"type":"object","additionalProperties":false,"required":["binary_version","commit","go_version","os","arch","config_schema","unit_schema","result_schema","kit_api","production_qualified"],"properties":{
-      "binary_version":{"type":"string"},"commit":{"type":"string","pattern":"^[a-f0-9]{40}$"},"go_version":{"type":"string"},"os":{"enum":["darwin","linux","windows"]},"arch":{"enum":["amd64","arm64"]},"config_schema":{"const":1},"unit_schema":{"const":1},"result_schema":{"const":1},"kit_api":{"const":1},"production_qualified":{"type":"boolean"}
-    }},
-    "doctor":{"type":"object","additionalProperties":false,"required":["offline","checks"],"properties":{
-      "offline":{"type":"boolean"},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","status","version","reason"],"properties":{"id":{"type":"string"},"status":{"enum":["ready","missing","refused"]},"version":{"type":["string","null"]},"reason":{"type":["string","null"]}}}}
-    }},
-    "list":{"type":"object","additionalProperties":false,"required":["units"],"properties":{
-      "units":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","kind","owner","platforms","members"],"properties":{"id":{"type":"string"},"kind":{"enum":["unit","alias"]},"owner":{"type":"string"},"platforms":{"$ref":"#/$defs/strings"},"members":{"$ref":"#/$defs/strings"}}}}
-    }},
-    "explain":{"type":"object","additionalProperties":false,"required":["mode","seed_units","selected_units","full_fallback","reasons","graph_engine","base_sha","source_sha"],"properties":{
-      "mode":{"enum":["unit","affected","full","candidate"]},"seed_units":{"$ref":"#/$defs/strings"},"selected_units":{"$ref":"#/$defs/strings"},"full_fallback":{"type":"boolean"},"reasons":{"$ref":"#/$defs/strings"},"graph_engine":{"const":"nx"},"base_sha":{"type":"string","pattern":"^[a-f0-9]{40}$"},"source_sha":{"type":"string","pattern":"^[a-f0-9]{40}$"}
-    }},
-    "run":{"type":"object","additionalProperties":false,"required":["selected_units","completed_units"],"properties":{"selected_units":{"$ref":"#/$defs/strings"},"completed_units":{"$ref":"#/$defs/strings"}}},
-    "purge":{"type":"object","additionalProperties":false,"required":["deleted_result_ids","retained_unknown_count"],"properties":{"deleted_result_ids":{"$ref":"#/$defs/strings"},"retained_unknown_count":{"type":"integer","minimum":0}}}
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keeldock:kd-ci:local-data:1",
+  "$defs": {
+    "strings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binary_version",
+        "commit",
+        "go_version",
+        "os",
+        "arch",
+        "config_schema",
+        "unit_schema",
+        "result_schema",
+        "kit_api",
+        "production_qualified"
+      ],
+      "properties": {
+        "binary_version": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "go_version": {
+          "type": "string"
+        },
+        "os": {
+          "enum": [
+            "darwin",
+            "linux",
+            "windows"
+          ]
+        },
+        "arch": {
+          "enum": [
+            "amd64",
+            "arm64"
+          ]
+        },
+        "config_schema": {
+          "const": 1
+        },
+        "unit_schema": {
+          "const": 1
+        },
+        "result_schema": {
+          "const": 1
+        },
+        "kit_api": {
+          "const": 1
+        },
+        "production_qualified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "doctor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offline",
+        "checks"
+      ],
+      "properties": {
+        "offline": {
+          "type": "boolean"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "status",
+              "version",
+              "reason"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "ready",
+                  "missing",
+                  "refused"
+                ]
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "list": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "units"
+      ],
+      "properties": {
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "owner",
+              "platforms",
+              "members"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "unit",
+                  "alias"
+                ]
+              },
+              "owner": {
+                "type": "string"
+              },
+              "platforms": {
+                "$ref": "#/$defs/strings"
+              },
+              "members": {
+                "$ref": "#/$defs/strings"
+              }
+            }
+          }
+        }
+      }
+    },
+    "explain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "seed_units",
+        "selected_units",
+        "full_fallback",
+        "reasons",
+        "graph_engine",
+        "base_sha",
+        "source_sha"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "unit",
+            "affected",
+            "full",
+            "candidate"
+          ]
+        },
+        "seed_units": {
+          "$ref": "#/$defs/strings"
+        },
+        "selected_units": {
+          "$ref": "#/$defs/strings"
+        },
+        "full_fallback": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "$ref": "#/$defs/strings"
+        },
+        "graph_engine": {
+          "const": "nx"
+        },
+        "base_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selected_units",
+        "completed_units"
+      ],
+      "properties": {
+        "selected_units": {
+          "$ref": "#/$defs/strings"
+        },
+        "completed_units": {
+          "$ref": "#/$defs/strings"
+        }
+      }
+    },
+    "purge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deleted_result_ids",
+        "retained_unknown_count"
+      ],
+      "properties": {
+        "deleted_result_ids": {
+          "$ref": "#/$defs/strings"
+        },
+        "retained_unknown_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "failures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "failure_count"
+      ],
+      "properties": {
+        "failure_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
   }
 }

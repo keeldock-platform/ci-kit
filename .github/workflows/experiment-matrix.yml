@@ -52,20 +52,6 @@ jobs:
             runner: ubuntu-24.04
           - platform: ios-simulator
             runner: macos-26
-          - platform: linux-arch
-            runner: ubuntu-24.04
-          - platform: linux-debian
-            runner: ubuntu-24.04
-          - platform: macos-arm64
-            runner: macos-26
-          - platform: macos-x64
-            runner: macos-15-intel
-          - platform: server-linux-arm64
-            runner: ubuntu-24.04-arm
-          - platform: server-linux-x64
-            runner: ubuntu-24.04
-          - platform: web-linux
-            runner: ubuntu-24.04
           - platform: windows-arm64
             runner: windows-11-arm
           - platform: windows-x64
@@ -171,6 +157,15 @@ jobs:
           code=$?
           printf 'code=%s\n' "$code" >> "$GITHUB_OUTPUT"
           exit "$code"
+      - name: Encrypted failure diagnostics
+        if: ${{ failure() && steps.execute.outputs.diagnostics == 'ready' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-diagnostics/failure-${{ matrix.platform }}-${{ github.run_attempt }}.age
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
       - name: Owned public Windows tool cleanup
         if: always() && startsWith(matrix.platform, 'windows-')
         shell: pwsh

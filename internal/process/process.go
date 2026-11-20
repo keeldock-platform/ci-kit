@@ -144,6 +144,7 @@ func RunAcquisition(ctx context.Context, s Spec, authority map[string]string) (R
 
 func run(parent context.Context, s Spec, authority map[string]string) (res Result, ret error) {
 	res.ExitCode = -1
+	defer func() { retainCapture(parent, s, res, ret) }()
 	res.CleanupComplete = true
 	if validateArgv(s.Argv) != nil || s.Timeout <= 0 || s.Timeout > 6*time.Hour {
 		return res, ErrInvalid
@@ -240,6 +241,7 @@ func run(parent context.Context, s Spec, authority map[string]string) (res Resul
 	}
 	res.Started = time.Now().UTC()
 	if e = cmd.Start(); e != nil {
+		_, _ = stderr.WriteString(e.Error())
 		return res, ErrCapture
 	}
 	res.CleanupComplete = false

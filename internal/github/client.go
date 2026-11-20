@@ -31,9 +31,10 @@ type REST interface {
 	RequestWithContext(context.Context, string, string, io.Reader) (*http.Response, error)
 }
 type Client struct {
-	REST    REST
-	Timeout time.Duration
-	Sleep   func(context.Context, time.Duration) error
+	REST              REST
+	ArtifactTransport http.RoundTripper
+	Timeout           time.Duration
+	Sleep             func(context.Context, time.Duration) error
 }
 
 func EnvironmentAllowed(env []string) bool {

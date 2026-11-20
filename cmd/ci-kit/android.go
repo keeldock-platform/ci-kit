@@ -244,6 +244,7 @@ func nativeHook(ctx context.Context) int {
 			return 3
 		}
 	}
+	ctx = process.WithCaptureSink(ctx, filepath.Join(state.Private, "diagnostics"))
 	index := 100000
 	host := capturedExecutor(state.Root, state.CaptureDirectory, &index)
 	code := 6
@@ -347,6 +348,7 @@ func nativePreflight(ctx context.Context) int {
 	if e != nil || packs.VerifyAndroidCommandLine(metadata, state.CommandLineToolsVersion) != nil {
 		return writeHookGate(state.Result, 13)
 	}
+	ctx = process.WithCaptureSink(ctx, filepath.Join(state.Private, "diagnostics"))
 	index := 200000
 	host := capturedExecutor(state.Root, state.CaptureDirectory, &index)
 	out, e := host(ctx, []string{filepath.Join(sdk, "cmdline-tools", "latest", "bin", "sdkmanager"), "--list_installed"}, ".", 2*time.Minute, nil)
@@ -378,6 +380,7 @@ func androidCommandRunner(state androidState, index, captureControls *int) func(
 		*index++
 		argv, e := absoluteExecutable(append([]string{}, cmd.Argv...))
 		if e != nil {
+			process.RetainAttempt(runCtx, process.Spec{Argv: cmd.Argv, Root: root, Cwd: cmd.Cwd}, e)
 			return 2
 		}
 		timeout := time.Duration(cmd.TimeoutSeconds) * time.Second
