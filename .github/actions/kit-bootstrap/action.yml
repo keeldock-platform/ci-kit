@@ -83,7 +83,7 @@ runs:
                     if alias == 'canary':
                         assert 'environments' in item
                     if 'environments' in item:
-                        slots = {'plan', 'linux-debian', 'linux-arch', 'macos-arm64', 'macos-x64', 'web-linux', 'server-linux-x64', 'server-linux-arm64'}
+                        slots = {'plan', 'linux-debian', 'linux-arch', 'macos-arm64', 'macos-x64', 'windows-x64', 'windows-arm64', 'web-linux', 'server-linux-x64', 'server-linux-arm64'}
                         environments = item['environments']
                         assert type(environments) is dict and set(environments) == slots
                         assert all(type(value) is str and re.fullmatch('[a-z][a-z0-9-]{0,95}', value) for value in environments.values())

@@ -81,6 +81,13 @@ func environmentFor(extra map[string]string, windows bool) ([]string, error) {
 		return k
 	}
 	allowed := map[string]bool{"PATH": true, "HOME": true, "USERPROFILE": true, "SYSTEMROOT": true, "WINDIR": true, "TMP": true, "TEMP": true, "TMPDIR": true, "LANG": true, "LC_ALL": true, "TZ": true, "CARGO_HOME": true, "RUSTUP_HOME": true, "CARGO_TARGET_DIR": true, "GOCACHE": true, "GOMODCACHE": true, "GOPATH": true, "JAVA_HOME": true, "ANDROID_HOME": true, "ANDROID_SDK_ROOT": true, "DEVELOPER_DIR": true, "SDKROOT": true, "CI": true, "NO_COLOR": true, "TERM": true}
+	// MSVC setup values are ordinary build inputs, scoped to Windows. Keep
+	// linker selection explicit so Git's coreutils link cannot shadow MSVC.
+	if windows {
+		for _, name := range []string{"LIB", "LIBPATH", "INCLUDE", "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER"} {
+			allowed[name] = true
+		}
+	}
 	env := map[string]string{"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.DevNull, "GIT_TERMINAL_PROMPT": "0"}
 	for _, pair := range os.Environ() {
 		k, v, _ := strings.Cut(pair, "=")

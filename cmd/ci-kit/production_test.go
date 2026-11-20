@@ -14,7 +14,7 @@ import (
 )
 
 func TestProductionRefusesExperimentAndUnadmittedAcquisition(t *testing.T) {
-	for _, platform := range []string{"windows-x64", "windows-arm64", "ios-simulator", "android-emulator"} {
+	for _, platform := range []string{"ios-simulator", "android-emulator"} {
 		t.Run(platform, func(t *testing.T) {
 			env := validEnvironment(t)
 			var fields map[string]string
@@ -67,7 +67,7 @@ func TestParkedWorkflowsHaveNoSourceAuthorityOrAdmissionDependency(t *testing.T)
 	}
 	validate := read("validate.yml")
 	jobs := validate["jobs"].(map[string]any)
-	for _, p := range []string{"windows-x64", "windows-arm64", "ios-simulator", "android-emulator"} {
+	for _, p := range []string{"ios-simulator", "android-emulator"} {
 		job := jobs["pack-"+p].(map[string]any)
 		for _, key := range []string{"uses", "secrets", "environment", "env", "with"} {
 			if _, ok := job[key]; ok {
@@ -111,7 +111,7 @@ func TestProductionPlannerRequiresExactlyAdmittedPlatforms(t *testing.T) {
 			t.Fatal("parked platform selected")
 		}
 	}
-	if len(seen) != 7 {
+	if len(seen) != 9 {
 		t.Fatal("admitted platform omitted")
 	}
 	for _, p := range protocol.AdmittedPlatforms {
@@ -126,5 +126,36 @@ func TestProductionPlannerRequiresExactlyAdmittedPlatforms(t *testing.T) {
 	// This invalid self/cross-platform prerequisite must remain non-admitting.
 	if _, e := planner.Plan(t.TempDir(), []catalog.Unit{u}, planner.Options{Mode: "full", Admission: true, AdmittedOnly: true}); e == nil {
 		t.Fatal("unavailable prerequisite admitted")
+	}
+}
+
+func TestWindowsProductionRetainsControlGates(t *testing.T) {
+	for _, platform := range []string{"windows-x64", "windows-arm64"} {
+		t.Run(platform, func(t *testing.T) {
+			env := validEnvironment(t)
+			var fields map[string]string
+			if json.Unmarshal([]byte(env["CI_REQUEST"]), &fields) != nil {
+				t.Fatal("fixture")
+			}
+			d, e := protocol.NewDispatch("sample", fields["source_sha"], fields["base_sha"], "full", "feedback", platform, "all", fields["request_id"])
+			if e != nil {
+				t.Fatal(e)
+			}
+			raw, _ := json.Marshal(d.Inputs)
+			env["CI_REQUEST"] = string(raw)
+			env["CI_KIT_OPERATION"] = "pack"
+			env["CI_PLATFORM"] = platform
+			if _, e := readControl(func(k string) string { return env[k] }); e != nil {
+				t.Fatal("native platform refused", e)
+			}
+			for _, change := range []struct{ key, value string }{{"CI_REF", "refs/heads/experiment/ci-probe"}, {"CI_ROUTE", "experiment"}, {"CI_WORKFLOW_SHA", "dddddddddddddddddddddddddddddddddddddddd"}, {"RUNNER_DEBUG", "1"}} {
+				prior := env[change.key]
+				env[change.key] = change.value
+				if _, e := readControl(func(k string) string { return env[k] }); e == nil {
+					t.Fatal("Windows bypassed control gate", change.key)
+				}
+				env[change.key] = prior
+			}
+		})
 	}
 }

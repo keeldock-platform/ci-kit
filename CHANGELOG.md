@@ -20,3 +20,5 @@ Adds generic unit selection, platform packs, captured execution, CLI protocols a
   without source authority and retain all acquisition, signer and capture guards.
 - Apply runner-level bulk completeness and one-shot observation while preserving
   mandatory privacy invariants and the full selection/local CLI surface.
+
+- Enable the reviewed native Windows x64 and ARM64 production packs, retaining captured MSVC inputs, fixed signature tools and encrypted failure diagnostics. Mobile packs remain parked.

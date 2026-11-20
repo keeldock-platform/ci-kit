@@ -11,8 +11,8 @@ Publication requires the layout and external-policy checks in `tests/policy`. A 
 ## Production platform scope
 
 The 2026-11-20 production cohort admits `linux-debian`, `linux-arch`,
-`macos-arm64`, `macos-x64`, `web-linux`, `server-linux-x64` and
-`server-linux-arm64`. The canonical descriptor vocabulary still includes Windows,
+`macos-arm64`, `macos-x64`, `windows-x64`, `windows-arm64`, `web-linux`, `server-linux-x64` and
+`server-linux-arm64`. The canonical descriptor vocabulary still includes
 iOS and Android. Their production jobs say “not admitted yet”, accept no source
 credentials, bind no environment and are absent from the finalizer dependencies.
 Explicit requests for those targets refuse before acquisition. They join only

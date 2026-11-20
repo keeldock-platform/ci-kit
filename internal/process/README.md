@@ -57,3 +57,7 @@ an observed child exit before stop/cleanup. Later cancellation during cleanup do
 not overwrite that first cause or the preserved raw exit/signal. Callers classify
 cleanup failure separately. RUSTUP_AUTO_INSTALL=0 is admitted only as an explicit
 fixed tool-control value; inherited or enabling values are refused.
+
+Windows additionally retains exactly INCLUDE, LIB, LIBPATH and the x64/ARM64
+MSVC target linker variables set by trusted tool preparation. No arbitrary Cargo
+prefix, Rust flags, wrapper or workflow-channel inheritance is admitted.

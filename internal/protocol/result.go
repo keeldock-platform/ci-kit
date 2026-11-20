@@ -246,6 +246,6 @@ func unique(ss []string) []string {
 
 // AdmittedPlatforms is the production scope approved on 2026-11-20.
 // Other canonical targets remain unavailable until separately qualified.
-var AdmittedPlatforms = []string{"linux-debian", "linux-arch", "macos-arm64", "macos-x64", "web-linux", "server-linux-x64", "server-linux-arm64"}
+var AdmittedPlatforms = []string{"linux-debian", "linux-arch", "macos-arm64", "macos-x64", "windows-x64", "windows-arm64", "web-linux", "server-linux-x64", "server-linux-arm64"}
 
 func AdmittedPlatform(platform string) bool { return slices.Contains(AdmittedPlatforms, platform) }

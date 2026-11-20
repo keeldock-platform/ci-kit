@@ -73,6 +73,6 @@ class DiagnosticsPolicy(unittest.TestCase):
             self.assertIn('slot: '+slot,block)
             self.assertNotIn('path:',block)
             self.assertNotIn('upload-artifact@',text)
-        self.assertEqual(8,enabled)
+        self.assertEqual(10,enabled)
 
 if __name__=='__main__':unittest.main()
