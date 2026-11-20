@@ -89,6 +89,10 @@ jobs:
         with:
           kit-sha: ${{ inputs.kit_sha }}
           route: experiment
+      - name: Source-free simulator service preparation
+        if: matrix.platform == 'ios-simulator'
+        shell: bash
+        run: node public-control/fixtures/synthetic/ios-prepare.mjs
       - name: Source-free hosted inventory
         shell: bash
         run: node public-control/fixtures/synthetic/probe.mjs
@@ -104,7 +108,7 @@ jobs:
         shell: bash
         run: |
           cd public-control
-          CI_REGISTERED_SIGNATURE_SMOKE=1 go test -mod=readonly ./internal/github -run '^TestHostedRegisteredSignature$'
+          CI_REGISTERED_SIGNATURE_SMOKE=1 go test -count=1 -v -mod=readonly ./internal/github -run '^TestHostedRegisteredSignature$'
           go test -mod=readonly -v ./internal/github -run '^TestHostedSignatureAssessment$' > "$RUNNER_TEMP/signature-assessment.log" 2>&1
           grep 'PUBLIC_SIGNATURE_DIAGNOSTIC {' "$RUNNER_TEMP/signature-assessment.log" || true
           if go test -mod=readonly ./cmd/ci-kit -run 'TestSharedSyntheticEnvironmentStaysExperimentOnly|TestExperimentRouteIsSeparateAndSyntheticOnly' > "$RUNNER_TEMP/boundary-test.log" 2>&1; then
@@ -140,10 +144,6 @@ jobs:
           sudo udevadm settle --timeout=10
           node public-control/fixtures/synthetic/android-support.cjs
           node public-control/fixtures/synthetic/android-public.cjs
-      - name: Source-free simulator service preparation
-        if: matrix.platform == 'ios-simulator'
-        shell: bash
-        run: node public-control/fixtures/synthetic/ios-prepare.mjs
       - name: Synthetic secrets ready
         shell: bash
         env:
