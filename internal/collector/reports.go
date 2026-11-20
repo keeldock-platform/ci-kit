@@ -6,7 +6,7 @@ import (
 	"errors"
 	junit "github.com/joshdk/go-junit"
 	"io"
-	"path/filepath"
+	"path"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -115,7 +115,9 @@ func ValidateReports(c Census, reports []Report) error {
 		if _, ok := expectations[key]; !ok {
 			return ErrReports
 		}
-		if r.Path == "" || filepath.IsAbs(r.Path) || filepath.Clean(r.Path) != r.Path || r.Path == ".." || strings.HasPrefix(r.Path, ".."+string(filepath.Separator)) || paths[key+"\x00"+r.Path] || len(r.Data) == 0 || len(r.Data) > MaxReport || !utf8.Valid(r.Data) {
+		// Report identifiers use canonical slash paths on every host. Reject native
+		// volume and separator syntax rather than normalising an untrusted alias.
+		if r.Path == "" || r.Path == "." || path.IsAbs(r.Path) || path.Clean(r.Path) != r.Path || strings.ContainsAny(r.Path, "\\:\x00\r\n\t") || r.Path == ".." || strings.HasPrefix(r.Path, "../") || paths[key+"\x00"+r.Path] || len(r.Data) == 0 || len(r.Data) > MaxReport || !utf8.Valid(r.Data) {
 			return ErrReports
 		}
 		paths[key+"\x00"+r.Path] = true

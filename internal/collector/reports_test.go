@@ -98,3 +98,52 @@ func TestFeedbackSubsetMayOmitGlobalAssertionTests(t *testing.T) {
 		t.Fatal("admission with zero assertion union accepted")
 	}
 }
+
+// Match the census too, so invalid paths cannot pass merely by being expected.
+func TestReportsUseCanonicalSlashPathsOnEveryHost(t *testing.T) {
+	for _, platform := range []string{"windows-x64", "windows-arm64", "linux"} {
+		for _, name := range []string{"report.xml", "plugin-alpha/reports/unit.xml", "folder with spaces/reports/unit.xml", strings.Repeat("segment/", 50) + "report.xml"} {
+			t.Run(platform+"/"+name, func(t *testing.T) {
+				c, r := reportFixture()
+				c.Entries[0].Platform, r[0].Platform = platform, platform
+				c.Entries[0].Reports, r[0].Path = []string{name}, name
+				if err := ValidateReports(c, r); err != nil {
+					t.Fatal("canonical report refused:", err)
+				}
+			})
+		}
+	}
+}
+func TestReportsRejectPathAliasesAndTraversal(t *testing.T) {
+	for _, name := range []string{"", ".", "..", "../report.xml", "../../report.xml", "a/../../report.xml", "a/../report.xml", "./report.xml", "a/./report.xml", "a//report.xml", "report.xml/", "/report.xml", "//server/share/report.xml", `\report.xml`, `a\report.xml`, `..\report.xml`, `C:/report.xml`, `C:report.xml`, `C:\report.xml`, `\\server\share\report.xml`, `\\?\C:\report.xml`, `//?/C:/report.xml`, `report.xml:stream`, "a\x00/report.xml", "a\r/report.xml", "a\n/report.xml", "a\t/report.xml"} {
+		t.Run(name, func(t *testing.T) {
+			c, r := reportFixture()
+			c.Entries[0].Reports, r[0].Path = []string{name}, name
+			if ValidateReports(c, r) == nil {
+				t.Fatal("noncanonical report accepted")
+			}
+		})
+	}
+}
+func TestReportsRejectCanonicalDuplicatesAndSubstitution(t *testing.T) {
+	for _, mutation := range []string{"duplicate", "substitution", "format", "extra-test"} {
+		t.Run(mutation, func(t *testing.T) {
+			c, r := reportFixture()
+			c.Entries[0].Reports, r[0].Path = []string{"plugin-alpha/reports/unit.xml"}, "plugin-alpha/reports/unit.xml"
+			switch mutation {
+			case "duplicate":
+				r = append(r, r[0])
+				c.Entries[0].Reports = append(c.Entries[0].Reports, r[0].Path)
+			case "substitution":
+				r[0].Path = "plugin-beta/reports/unit.xml"
+			case "format":
+				r[0].Format = "other"
+			case "extra-test":
+				r[0].Data = []byte(`<testsuite><testcase classname="suite" name="case-a"/><testcase name="extra"/></testsuite>`)
+			}
+			if ValidateReports(c, r) == nil {
+				t.Fatal("incomplete census accepted")
+			}
+		})
+	}
+}
