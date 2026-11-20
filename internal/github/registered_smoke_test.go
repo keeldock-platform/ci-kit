@@ -56,22 +56,24 @@ func TestHostedRegisteredSignature(t *testing.T) {
 	if err != nil || ce != nil {
 		t.Fatal("PUBLIC_VERIFY signers write")
 	}
-	args := []string{git, "--no-replace-objects", "-c", "core.hooksPath=" + os.DevNull, "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "diff.external=", "-C", fixture, "-c", "gpg.format=ssh", "-c", "gpg.ssh.program=" + ssh, "-c", "gpg.program=false", "-c", "gpg.x509.program=false", "-c", "gpg.ssh.allowedSignersFile=" + allowedPath, "-c", "gpg.ssh.revocationFile=", "-c", "gpg.minTrustLevel=fully", "verify-commit", tip}
+	args := []string{git, "--no-replace-objects", "-c", "trace2.eventTarget=1", "-c", "core.hooksPath=" + os.DevNull, "-c", "core.fsmonitor=false", "-c", "credential.helper=", "-c", "diff.external=", "-C", fixture, "-c", "gpg.format=ssh", "-c", "gpg.ssh.program=" + ssh, "-c", "gpg.program=false", "-c", "gpg.x509.program=false", "-c", "gpg.ssh.allowedSignersFile=" + allowedPath, "-c", "gpg.ssh.revocationFile=", "-c", "gpg.minTrustLevel=fully", "verify-commit", tip}
 	result, runErr := process.Run(context.Background(), process.Spec{Argv: args, Root: fixture, Cwd: ".", ResultDir: filepath.Join(temp, "public-verify"), Timeout: 30 * time.Second, OutputLimit: 65536, Env: map[string]string{"PATH": filepath.Dir(git)}})
 	if runErr != nil || result.ExitCode != 0 {
-		capture, openErr := os.Open(result.StderrPath)
-		if openErr != nil {
-			t.Fatal("PUBLIC_VERIFY capture unavailable")
+		for _, stream := range []struct{ name, path string }{{"STDOUT", result.StdoutPath}, {"STDERR", result.StderrPath}} {
+			capture, openErr := os.Open(stream.path)
+			if openErr != nil {
+				t.Fatal("PUBLIC_VERIFY capture unavailable")
+			}
+			raw, readErr := io.ReadAll(io.LimitReader(capture, 65537))
+			capture.Close()
+			if readErr != nil {
+				t.Fatal("PUBLIC_VERIFY capture unreadable")
+			}
+			if len(raw) > 65536 {
+				t.Fatal("PUBLIC_VERIFY output bound")
+			}
+			t.Logf("PUBLIC_VERIFY_%s %s", stream.name, raw)
 		}
-		defer capture.Close()
-		raw, readErr := io.ReadAll(io.LimitReader(capture, 65537))
-		if readErr != nil {
-			t.Fatal("PUBLIC_VERIFY capture unreadable")
-		}
-		if len(raw) > 65536 {
-			t.Fatal("PUBLIC_VERIFY output bound")
-		}
-		t.Logf("PUBLIC_VERIFY_STDERR %s", raw)
 		t.Fatalf("PUBLIC_VERIFY native result code=%d timeout=%t cleanup=%t", result.ExitCode, result.TimedOut, result.CleanupComplete)
 	}
 	t.Log("PUBLIC_VERIFY native PASS")
