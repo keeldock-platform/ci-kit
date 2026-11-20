@@ -37,21 +37,39 @@ class DiagnosticsPolicy(unittest.TestCase):
         self.assertTrue(any(s in malicious for s in ('SOURCE_READ','SOURCE_MAP')))
 
     def test_only_ciphertext_uploaded(self):
+        uploader=(ROOT/'.github/actions/diagnostics-upload/action.yml').read_text()
+        self.assertIn('using: composite',uploader)
+        self.assertIn("if: ${{ failure() }}",uploader)
+        self.assertIn('actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9',uploader)
+        self.assertIn('retention-days: 1',uploader)
+        self.assertIn('if-no-files-found: error',uploader)
+        self.assertIn('include-hidden-files: false',uploader)
+        self.assertIn('overwrite: false',uploader)
+        upload_path=re.search(r'path: (.+)',uploader)[1]
+        self.assertEqual('${{ runner.temp }}/ci-diagnostics/failure-${{ inputs.slot }}-${{ github.run_attempt }}.age',upload_path)
+        self.assertNotIn('*',upload_path)
         files=list((ROOT/'.github/workflows').glob('pack-*.yml'))+[ROOT/'.github/workflows/validate.yml']
         self.assertEqual(len(files),12)
+        enabled=0
         for path in files:
             text=path.read_text()
             if path.name.startswith("pack-") and "if: github.repository == ''" in text:
                 self.assertNotIn('SOURCE_READ',text)
                 self.assertNotIn('upload-artifact',text)
+                self.assertNotIn('diagnostics-upload',text)
                 continue
+            enabled+=1
             self.assertIn('name: Encrypted failure diagnostics',text)
-            block=text.split('name: Encrypted failure diagnostics',1)[1]
-            self.assertIn("outputs.diagnostics == 'ready'",block)
-            self.assertIn('retention-days: 1',block)
-            self.assertIn('actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9',block)
-            upload_path=re.search(r'path: (.+)',block)[1]
-            self.assertRegex(upload_path,r'^\$\{\{ runner.temp \}\}/ci-diagnostics/failure-[a-z0-9-]+-\$\{\{ github.run_attempt \}\}\.age$')
-            self.assertNotIn('*',upload_path)
+            block=re.split(r'\n(?=  [a-z])',text.split('name: Encrypted failure diagnostics',1)[1],maxsplit=1)[0]
+            # Full-SHA dependency execution lives in a same-revision composite,
+            # as do the other kit dependencies verified by strict native locks.
+            step='plan' if path.name=='validate.yml' else 'execute'
+            slot='plan' if path.name=='validate.yml' else path.stem[5:]
+            self.assertIn("failure() && steps."+step+".outputs.diagnostics == 'ready'",block)
+            self.assertIn('uses: $/.github/actions/diagnostics-upload',block)
+            self.assertIn('slot: '+slot,block)
+            self.assertNotIn('path:',block)
+            self.assertNotIn('upload-artifact@',text)
+        self.assertEqual(8,enabled)
 
 if __name__=='__main__':unittest.main()

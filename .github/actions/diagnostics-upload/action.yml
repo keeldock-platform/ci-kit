@@ -1,0 +1,20 @@
+name: Upload encrypted failure diagnostics
+description: Publish one sealed ciphertext at the owning workflow revision
+inputs:
+  slot:
+    description: Literal plan or enabled platform slot selected by the owning workflow
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Upload sealed ciphertext
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: diagnostics-${{ inputs.slot }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/ci-diagnostics/failure-${{ inputs.slot }}-${{ github.run_attempt }}.age
+        retention-days: 1
+        if-no-files-found: error
+        include-hidden-files: false
+        overwrite: false
+        compression-level: 0

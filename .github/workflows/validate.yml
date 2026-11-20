@@ -225,13 +225,9 @@ jobs:
         run: '"$RUNNER_TEMP/ci-kit"'
       - name: Encrypted failure diagnostics
         if: ${{ failure() && steps.plan.outputs.diagnostics == 'ready' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: $/.github/actions/diagnostics-upload
         with:
-          name: diagnostics-plan-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/ci-diagnostics/failure-plan-${{ github.run_attempt }}.age
-          retention-days: 1
-          if-no-files-found: error
-          compression-level: 0
+          slot: plan
   pack-linux-debian:
     name: pack-linux-debian
     needs: [preflight, plan]
