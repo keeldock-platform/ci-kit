@@ -134,13 +134,15 @@ try {
   if ($pe.Length -lt 256 -or $pe[0] -ne 0x4d -or $pe[1] -ne 0x5a) { throw 'native public tool' }
   $offset = [BitConverter]::ToInt32($pe, 0x3c)
   if ($offset -lt 0 -or $offset + 6 -gt $pe.Length -or [BitConverter]::ToUInt32($pe, $offset) -ne 0x4550 -or [BitConverter]::ToUInt16($pe, $offset + 4) -ne $asset[2]) { throw 'native public tool architecture' }
+  . (Join-Path $PSScriptRoot 'windows-signature.ps1')
+  $ssh = Select-PublicSignatureTool $git $base $arch
   $configDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'KeelDock'
   if (Test-Path -LiteralPath $configDir) { throw 'existing machine policy' }
   $null = New-Item -ItemType Directory -Path $configDir
   $ownedConfig = $true
   Set-UserOnly $configDir $true
   $configFile = Join-Path $configDir 'kd-ci-machine.json'
-  @{ schema_version=1; local_policy='developer-machine'; allowed_local_concerns=@(); source_roots=@{}; tools=@{git=$git}; planner_directory=''; kit_root='' } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configFile -Encoding utf8NoBOM
+  @{ schema_version=1; local_policy='developer-machine'; allowed_local_concerns=@(); source_roots=@{}; tools=@{git=$git; 'ssh-keygen'=$ssh}; planner_directory=''; kit_root='' } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configFile -Encoding utf8NoBOM
   Set-UserOnly $configFile $false
   'CI_OWNED_WINDOWS_TOOL=' + $base | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
   'STAGE windows-tool-staging PASS'

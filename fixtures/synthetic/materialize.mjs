@@ -16,7 +16,7 @@ if (!['success','failure','stdout','stderr','ansi','annotation','crash','timeout
 const support = process.env.CI_SYNTHETIC_SUPPORT_FILE ? JSON.parse(fs.readFileSync(process.env.CI_SYNTHETIC_SUPPORT_FILE, 'utf8')) : {};
 fs.copyFileSync(path.join(fixtureRoot, 'browser-package.json'), path.join(target, 'package.json'));
 fs.copyFileSync(path.join(fixtureRoot, 'browser-package-lock.json'), path.join(target, 'package-lock.json'));
-for (const file of ['native.mjs','native.test.mjs']) fs.copyFileSync(path.join(fixtureRoot,file),path.join(target,'ci',file));
+for (const file of ['native.mjs','native.test.mjs','simctl-query.mjs']) fs.copyFileSync(path.join(fixtureRoot,file),path.join(target,'ci',file));
 fs.copyFileSync(path.join(fixtureRoot, 'setup.mjs'), path.join(target, 'ci/setup.mjs'));
 fs.copyFileSync(path.join(fixtureRoot, 'canary.mjs'), path.join(target, 'ci/canary.mjs'));
 fs.writeFileSync(path.join(target, 'ci/scenario.json'), JSON.stringify({scenario})+'\n');

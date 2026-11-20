@@ -133,9 +133,17 @@ jobs:
         shell: bash
         run: |
           node public-control/fixtures/synthetic/android-bundle.cjs
-          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          # https://github.com/ReactiveCircus/android-emulator-runner/blob/a421e43855164a8197daf9d8d40fe71c6996bb0d/README.md
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle --timeout=10
           node public-control/fixtures/synthetic/android-support.cjs
           node public-control/fixtures/synthetic/android-public.cjs
+      - name: Source-free simulator service preparation
+        if: matrix.platform == 'ios-simulator'
+        shell: bash
+        run: node public-control/fixtures/synthetic/ios-prepare.mjs
       - name: Synthetic secrets ready
         shell: bash
         env:

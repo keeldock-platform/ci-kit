@@ -2,6 +2,7 @@ import {describe,it} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
+import {simulatorModel} from './simctl-query.mjs';
 import {createRequire} from 'node:module';
 const local = createRequire(path.resolve('package.json'));
 describe('venue',()=>{
@@ -10,7 +11,7 @@ describe('venue',()=>{
   if(platform==='ios-simulator'){
    const udid=process.env.KD_CI_SIMULATOR_UDID;
    assert.match(udid||'',/^[a-f0-9-]{36}$/i);
-   const model=execFileSync('/usr/bin/xcrun',['simctl','getenv',udid,'SIMULATOR_MODEL_IDENTIFIER'],{encoding:'utf8',timeout:30000}).trim();
+   const model=simulatorModel(udid);
    assert.ok(model.startsWith(variant==='phone'?'iPhone':'iPad'));
   }else if(platform==='android-emulator'){
    const sdk=process.env.ANDROID_HOME||process.env.ANDROID_SDK_ROOT;
