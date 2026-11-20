@@ -8,7 +8,7 @@ runs:
   using: composite
   steps:
     - name: Upload sealed ciphertext
-      if: ${{ failure() }}
+      if: ${{ always() }}
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
         name: diagnostics-${{ inputs.slot }}-${{ github.run_attempt }}

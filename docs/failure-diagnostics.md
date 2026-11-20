@@ -20,7 +20,10 @@ bounded JSON envelope to the configured native recipient. Only after successful
 atomic sealing does the trusted Execute/Plan step set `diagnostics=ready`. The
 one-day uploader accepts one exact `.age` path and requires that signal. Missing,
 preexisting, invalid or incomplete ciphertext publication refuses; plaintext is
-never an upload fallback. No artifact is made on success. Public logs retain
+never an upload fallback. The owning workflow guards the upload on failed execution and successful sealing.
+The inner composite upload runs with `always()` because its own `failure()` does
+not inherit the caller step's failure. The exact ciphertext path and no-file
+refusal remain enforced. No artifact is made on success. Public logs retain
 fixed outcomes for all source-bearing work.
 
 The coordinator's dedicated identity is `~/.config/keeldock-ci/diag-age.key`,

@@ -8,6 +8,8 @@ Adds generic unit selection, platform packs, captured execution, CLI protocols a
 
 ## Unreleased
 
+- Publish sealed failure diagnostics when the owning job has already failed.
+
 - Prepare an independent public kit with immutable action execution and caller policy delegation.
 - Preserve quick related tests within multi-test shards and reject invalid shard identities.
 - Create fixture report parents during captured setup and select the Rust fixture.

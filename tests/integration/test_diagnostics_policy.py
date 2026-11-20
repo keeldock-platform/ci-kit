@@ -39,7 +39,10 @@ class DiagnosticsPolicy(unittest.TestCase):
     def test_only_ciphertext_uploaded(self):
         uploader=(ROOT/'.github/actions/diagnostics-upload/action.yml').read_text()
         self.assertIn('using: composite',uploader)
-        self.assertIn("if: ${{ failure() }}",uploader)
+        # The owning workflow already requires failed execution plus a sealed
+        # artifact. Native composites reset failure() to their own step scope.
+        self.assertIn("if: ${{ always() }}",uploader)
+        self.assertNotIn("failure()",uploader)
         self.assertIn('actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9',uploader)
         self.assertIn('retention-days: 1',uploader)
         self.assertIn('if-no-files-found: error',uploader)
