@@ -94,12 +94,14 @@ func VerifyAndroidCommandLine(data []byte, want string) error {
 		return ErrSupport
 	}
 	found := ""
+	seen := false
 	for _, line := range strings.Split(string(data), "\n") {
 		key, value, ok := strings.Cut(line, "=")
 		if ok && strings.TrimSpace(key) == "Pkg.Revision" {
-			if found != "" {
+			if seen {
 				return ErrSupport
 			}
+			seen = true
 			found = strings.TrimSpace(value)
 		}
 	}
