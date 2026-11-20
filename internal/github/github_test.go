@@ -434,3 +434,21 @@ func TestPublishedKitIncludesCurrentRevocationAuthority(t *testing.T) {
 		t.Fatal("revocation authority must be committed at the current kit revision")
 	}
 }
+
+func TestSignatureToolsIgnoreAmbientPathOrder(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", root)
+	for _, name := range []string{"git", "ssh-keygen"} {
+		got, err := TrustedExecutable(name, root)
+		want, linkErr := filepath.EvalSymlinks(signatureTool(name))
+		if err != nil || linkErr != nil || got != want {
+			t.Fatal("OS signature tool unavailable or PATH-selected")
+		}
+	}
+	if _, err := TrustedExecutable("unregistered-tool", root); err == nil {
+		t.Fatal("unregistered PATH tool accepted")
+	}
+}
