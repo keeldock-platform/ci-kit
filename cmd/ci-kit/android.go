@@ -288,10 +288,10 @@ func nativeHook(ctx context.Context) int {
 		return writeHookGate(state.Result, 26)
 	}
 	if e != nil || packs.VerifyAndroidPackages(out, state.Packages) != nil {
-		return writeHookGate(state.Result, 27)
+		return writeHookOutcome(state.Result, 6, 0, 27)
 	}
 	if packs.VerifySDKFiles(ctx, sdk, state.ToolSHA256) != nil {
-		return writeHookGate(state.Result, 28)
+		return writeHookOutcome(state.Result, 6, 0, 28)
 	}
 	{
 		run := androidCommandRunner(state, &index, &captureControls)
