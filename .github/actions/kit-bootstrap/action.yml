@@ -22,8 +22,6 @@ runs:
         CI_BOOTSTRAP_PRIVATE: ${{ github.event.repository.private }}
         CI_BOOTSTRAP_SHA: ${{ inputs.kit-sha }}
         CI_BOOTSTRAP_POLICY_ONLY: ${{ inputs.policy-only }}
-        CI_EXPERIMENT_POLICY: ${{ vars.CI_EXPERIMENT_POLICY }}
-        CI_BOOTSTRAP_POLICY: ${{ inputs.route == 'experiment' && vars.CI_EXPERIMENT_POLICY || vars.CI_ADMISSION_POLICY }}
         CI_BOOTSTRAP_WORKFLOW_SHA: ${{ github.workflow_sha }}
         CI_BOOTSTRAP_WORKFLOW_REF: ${{ github.workflow_ref }}
         CI_BOOTSTRAP_REPOSITORY: ${{ github.repository }}
@@ -45,6 +43,7 @@ runs:
             return value
         try:
             e = dict(os.environ)
+            e.setdefault('CI_BOOTSTRAP_POLICY', e.get('CI_EXPERIMENT_POLICY' if e.get('CI_ROUTE') == 'experiment' else 'CI_ADMISSION_POLICY', ''))
             sha = e['CI_BOOTSTRAP_SHA']
             assert re.fullmatch('[a-f0-9]{40}', sha)
             assert e['CI_BOOTSTRAP_EVENT'] in (['workflow_dispatch', 'pull_request', 'push', 'schedule'] if e['CI_BOOTSTRAP_POLICY_ONLY'] == 'true' else ['workflow_dispatch'])
