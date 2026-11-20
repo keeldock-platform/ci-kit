@@ -106,10 +106,19 @@ jobs:
       - name: Source-free hosted inventory
         shell: bash
         run: node public-control/fixtures/synthetic/probe.mjs
+      - name: Windows public tool staging
+        if: startsWith(matrix.platform, 'windows-')
+        shell: pwsh
+        run: ./public-control/fixtures/synthetic/windows-tools.ps1
+      - name: Public browser reproduction
+        if: matrix.platform == 'web-linux'
+        shell: bash
+        run: bash public-control/fixtures/synthetic/web-public.sh
       - name: Source-free boundary regressions
         shell: bash
         run: |
           cd public-control
+          CI_REGISTERED_SIGNATURE_SMOKE=1 go test -mod=readonly ./internal/github -run '^TestHostedRegisteredSignature$'
           go test -mod=readonly -v ./internal/github -run '^TestHostedSignatureAssessment$' > "$RUNNER_TEMP/signature-assessment.log" 2>&1
           grep 'PUBLIC_SIGNATURE_DIAGNOSTIC {' "$RUNNER_TEMP/signature-assessment.log" || true
           if go test -mod=readonly ./cmd/ci-kit -run 'TestSharedSyntheticEnvironmentStaysExperimentOnly|TestExperimentRouteIsSeparateAndSyntheticOnly' > "$RUNNER_TEMP/boundary-test.log" 2>&1; then
@@ -137,7 +146,7 @@ jobs:
         if: matrix.platform == 'android-emulator'
         shell: bash
         run: |
-          npm ci --prefix public-android-tool --ignore-scripts --no-audit --no-fund
+          node public-control/fixtures/synthetic/android-bundle.cjs
           sudo setfacl -m "u:$(id -un):rw" /dev/kvm
           node public-control/fixtures/synthetic/android-support.cjs
       - name: Synthetic secrets ready
@@ -161,3 +170,11 @@ jobs:
           code=$?
           printf 'code=%s\n' "$code" >> "$GITHUB_OUTPUT"
           exit "$code"
+      - name: Owned public Windows tool cleanup
+        if: always() && startsWith(matrix.platform, 'windows-')
+        shell: pwsh
+        run: |
+          if ($env:CI_OWNED_WINDOWS_TOOL) {
+            Remove-Item -LiteralPath $env:CI_OWNED_WINDOWS_TOOL -Recurse -Force
+            Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'KeelDock') -Recurse -Force
+          }
