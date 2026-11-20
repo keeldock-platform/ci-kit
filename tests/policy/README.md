@@ -1,5 +1,7 @@
 # Publication policy
 
+Before applying an owner handoff, run `python3 -B tests/policy/handoff_consistency.py --root . --settings /absolute/path/settings.json --callers /absolute/path/caller-templates` against clean signed production and caller snapshots. Generate the external settings and callers after the final kit commit; the check reads actual Git HEAD without an override. It checks all active settings/registration/diagnostics pins, caller workflow inputs and lock pins, every workflow and composite dependency against each parent/child exact allowlist, child unions, and recorded legacy consumers. Historical exact allowlist refs remain for coexistence. A later kit commit requires regenerating the handoff. The owner-only settings and inventory stay outside the public repository. Regression tests run in the ordinary Python integration suite.
+
 `public_content.py` scans tracked paths, file contents, index blobs and every outgoing commit using an externally supplied JSON policy. The policy has `schema_version: 1` and nonempty `terms` and `markers` arrays; keep it outside the public checkout. Missing policy, unsupported content or any match fails. Output contains a fixed result; an optional private report stays outside the checkout.
 
 Run the scan before publishing. `pre-push` is the candidate-branch publishing hook; it never dispatches workflows. Synthetic tests use invented terms only.
