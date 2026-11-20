@@ -41,7 +41,7 @@ for (const name of ['rust', 'typescript', 'plugin-alpha', 'plugin-beta']) {
     resources: { weight: 1 }, needs: [], depends_on: [], optional_contracts: [],
     cache: { policy: 'none' }, assertions: [], outputs: { visibility: 'private-runner-only' },
     pack: 'workspace', cost_class: 'quick', checks: {
-      unit: { census, paths: name === 'rust' ? ['rust/src/**','rust/Cargo.toml','rust/rust.test.mjs'] : [`${name}/*.ts`], test_paths: [name === 'rust' ? 'rust/rust.test.mjs' : `${name}/*.test.ts`], inputs: [],
+      unit: { census, paths: name === 'rust' ? ['rust/src/**','rust/Cargo.toml','rust/rust.test.mjs','rust/cargo-check.mjs'] : [`${name}/*.ts`], test_paths: [name === 'rust' ? 'rust/rust.test.mjs' : `${name}/*.test.ts`], inputs: [],
         platforms: hostPlatforms,
         commands: { default: [{ cwd: '.', argv: ['node', 'ci/canary.mjs'], timeout_seconds: 10 }, { cwd: name, argv: ['node', '--test', '--test-reporter=junit', '--test-reporter-destination=reports/unit.xml', name === 'rust' ? 'rust.test.mjs' : 'sum.test.ts'] }] },
         needs: [], depends_on: [], variants: [], assertions: census, reports: [`${name}/reports/unit.xml`] },
