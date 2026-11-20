@@ -106,6 +106,13 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 		}
 		result, err := process.Run(runCtx, process.Spec{Argv: argv, Root: source, Cwd: cwd, Env: env, ResultDir: filepath.Join(private, "capture-"+strconv.Itoa(index)), Timeout: timeout})
 		if result.TimedOut {
+			if experiment {
+				phase := 2
+				if isSyntheticCanary(cmd) {
+					phase = 1
+				}
+				fmt.Printf("PACK_TIMEOUT_PHASE %d\n", phase)
+			}
 			return 4
 		}
 		if state := contextExit(runCtx); state != 0 {
@@ -218,10 +225,19 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 			readyState := contextExit(readyCtx)
 			readyCancel()
 			if readyState != 0 {
+				if diagnosticMode {
+					fmt.Println("STAGE native-ready FAIL")
+				}
 				return readyState
 			}
 			if readyErr != nil {
+				if diagnosticMode {
+					fmt.Println("STAGE native-ready FAIL")
+				}
 				return 3
+			}
+			if diagnosticMode {
+				fmt.Println("STAGE native-ready PASS")
 			}
 			unitCtx, cancel := context.WithTimeout(ctx, time.Duration(u.TimeoutSeconds)*time.Second)
 			defer cancel()
