@@ -8,10 +8,41 @@ on:
       kit_sha:
         type: string
         required: true
+      experiment_policy:
+        type: string
+        required: true
+    secrets:
+      CI_SYNTHETIC_SOURCE_MAP:
+        required: true
+      SYNTHETIC_SOURCE_TOKEN:
+        required: true
 permissions: {}
 cache-mode: none
 jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      CI_REQUEST: ${{ inputs.request }}
+      CI_EXPERIMENT_POLICY: ${{ inputs.experiment_policy }}
+    steps:
+      - name: Kit
+        uses: $/.github/actions/kit-bootstrap
+        with:
+          kit-sha: ${{ inputs.kit_sha }}
+          route: experiment
+      - name: Compile and boundary checks
+        shell: bash
+        run: |
+          cd public-control
+          go test -mod=readonly ./...
+          go vet -mod=readonly ./...
+          echo 'STAGE bootstrap PASS'
+          echo 'Synthetic source-free bootstrap PASS' >> "$GITHUB_STEP_SUMMARY"
   pack:
+    needs: bootstrap
     name: pack-${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -47,7 +78,7 @@ jobs:
     env:
       CI_ROUTE: experiment
       CI_REQUEST: ${{ inputs.request }}
-      CI_EXPERIMENT_POLICY: ${{ vars.CI_EXPERIMENT_POLICY }}
+      CI_EXPERIMENT_POLICY: ${{ inputs.experiment_policy }}
       CI_KIT_SHA: ${{ inputs.kit_sha }}
       CI_WORKFLOW_SHA: ${{ github.workflow_sha }}
       CI_WORKFLOW_REF: ${{ github.workflow_ref }}
@@ -85,6 +116,15 @@ jobs:
             echo 'STAGE boundary FAIL'
             exit 1
           fi
+      - name: Synthetic secrets ready
+        shell: bash
+        env:
+          SOURCE_MAP: ${{ secrets.CI_SYNTHETIC_SOURCE_MAP }}
+          SOURCE_READ_01: ${{ secrets.SYNTHETIC_SOURCE_TOKEN }}
+        run: |
+          set -eu
+          test -n "$SOURCE_MAP" && test -n "$SOURCE_READ_01" || { echo 'STAGE secrets FAIL'; exit 3; }
+          echo 'STAGE secrets PASS'
       - name: Execute
         id: execute
         shell: bash
