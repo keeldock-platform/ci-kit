@@ -159,7 +159,8 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 		*index++
 		result, e := process.RunTool(ctx, process.Spec{Argv: []string{node, filepath.Join(wd, "public-control", "packs", "android-emulator", "lifecycle.cjs")}, Root: root, Cwd: ".", ResultDir: filepath.Join(private, "android-capture-"+strconv.Itoa(*index)), Timeout: 50 * time.Minute}, "android-emulator-runner", extra)
 		var hook struct {
-			Code *int `json:"code"`
+			Code            *int `json:"code"`
+			CaptureControls int  `json:"capture_controls"`
 		}
 		raw, readErr := readRegular(state.Result, 1024)
 		if readErr == nil && config.Decode(raw, &hook, 1024) == nil && hook.Code != nil && *hook.Code >= 0 && *hook.Code <= 8 {
@@ -168,6 +169,22 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 			}
 			if e != nil || result.ExitCode != 0 || !result.CleanupComplete {
 				return 6
+			}
+			if state.Diagnostic {
+				expected := 0
+				for _, inv := range invocations {
+					for _, cmd := range inv.Commands {
+						if isSyntheticCanary(cmd) {
+							expected++
+						}
+					}
+				}
+				if expected == 0 || hook.CaptureControls != expected {
+					return 6
+				}
+				for i := 0; i < expected; i++ {
+					fmt.Println("STAGE capture PASS")
+				}
 			}
 		} else {
 			return 6
@@ -220,6 +237,7 @@ func nativeHook(ctx context.Context) int {
 	index := 100000
 	host := capturedExecutor(state.Root, state.CaptureDirectory, &index)
 	code := 6
+	captureControls := 0
 	if _, ok := state.Origins[""]; ok {
 		return 3
 	}
@@ -247,43 +265,21 @@ func nativeHook(ctx context.Context) int {
 		return writeHookResult(state.Result, 3)
 	}
 	if e == nil && packs.VerifyAndroidPackages(out, state.Packages) == nil && packs.VerifySDKFiles(ctx, sdk, state.ToolSHA256) == nil {
-		run := func(runCtx context.Context, cmd catalog.Command, root string) int {
-			index++
-			argv, e := absoluteExecutable(append([]string{}, cmd.Argv...))
-			if e != nil {
-				return 2
-			}
-			timeout := time.Duration(cmd.TimeoutSeconds) * time.Second
-			if timeout == 0 {
-				timeout = 20 * time.Minute
-			}
-			r, e := process.Run(runCtx, process.Spec{Argv: argv, Root: root, Cwd: cmd.Cwd, ResultDir: filepath.Join(state.CaptureDirectory, "android-unit-"+strconv.Itoa(index)), Timeout: timeout, Env: map[string]string{"ANDROID_SERIAL": "emulator-5554"}})
-			if r.TimedOut {
-				return 4
-			}
-			if state := contextExit(runCtx); state != 0 {
-				return state
-			}
-			if r.ExitCode > 0 {
-				return 1
-			}
-			if e != nil || r.ExitCode != 0 || !r.CleanupComplete {
-				return 6
-			}
-			return 0
-		}
+		run := androidCommandRunner(state, &index, &captureControls)
 		code = runChecks(state.executionContext(ctx), state.Root, state.Private, "android-emulator", state.Units, state.Origins, state.Selected, state.Admission, run, func(context.Context, string) error { return nil })
 	}
-	return writeHookResult(state.Result, code)
+	return writeHookResultWithCaptures(state.Result, code, captureControls)
 }
-func writeHookResult(path string, code int) int {
+func writeHookResult(path string, code int) int { return writeHookResultWithCaptures(path, code, 0) }
+func writeHookResultWithCaptures(path string, code, captures int) int {
 	f, e := process.CreatePrivateFile(path)
 	if e != nil {
 		return 6
 	}
 	raw, _ := json.Marshal(struct {
-		Code int `json:"code"`
-	}{code})
+		Code            int `json:"code"`
+		CaptureControls int `json:"capture_controls"`
+	}{code, captures})
 	_, e = f.Write(raw)
 	closeErr := f.Close()
 	if e != nil || closeErr != nil {
@@ -335,4 +331,38 @@ func (s androidState) executionContext(ctx context.Context) context.Context {
 		return diagnosticContext(ctx)
 	}
 	return ctx
+}
+
+func androidCommandRunner(state androidState, index, captureControls *int) func(context.Context, catalog.Command, string) int {
+	return func(runCtx context.Context, cmd catalog.Command, root string) int {
+		*index++
+		argv, e := absoluteExecutable(append([]string{}, cmd.Argv...))
+		if e != nil {
+			return 2
+		}
+		timeout := time.Duration(cmd.TimeoutSeconds) * time.Second
+		if timeout == 0 {
+			timeout = 20 * time.Minute
+		}
+		r, e := process.Run(runCtx, process.Spec{Argv: argv, Root: root, Cwd: cmd.Cwd, ResultDir: filepath.Join(state.CaptureDirectory, "android-unit-"+strconv.Itoa(*index)), Timeout: timeout, Env: map[string]string{"ANDROID_SERIAL": "emulator-5554"}})
+		if r.TimedOut {
+			return 4
+		}
+		if state := contextExit(runCtx); state != 0 {
+			return state
+		}
+		if r.ExitCode > 0 {
+			return 1
+		}
+		if e != nil || r.ExitCode != 0 || !r.CleanupComplete {
+			return 6
+		}
+		if state.Diagnostic && isSyntheticCanary(cmd) {
+			if syntheticCapture(root, r) != nil {
+				return 6
+			}
+			*captureControls++
+		}
+		return 0
+	}
 }

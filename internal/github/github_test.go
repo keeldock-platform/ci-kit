@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/keeldock-platform/ci-kit/internal/collector"
+	"github.com/keeldock-platform/ci-kit/internal/config"
 	"github.com/keeldock-platform/ci-kit/internal/process"
 	"github.com/keeldock-platform/ci-kit/internal/protocol"
 	"io"
@@ -443,7 +444,13 @@ func TestSignatureToolsIgnoreAmbientPathOrder(t *testing.T) {
 	t.Setenv("PATH", root)
 	for _, name := range []string{"git", "ssh-keygen"} {
 		got, err := TrustedExecutable(name, root)
-		want, linkErr := filepath.EvalSymlinks(signatureTool(name))
+		expected := signatureTool(name)
+		if machine, loadErr := config.LoadMachine(); loadErr == nil {
+			if registered, ok := machine.Tools[name]; ok {
+				expected = registered
+			}
+		}
+		want, linkErr := filepath.EvalSymlinks(expected)
 		if err != nil || linkErr != nil || got != want {
 			t.Fatal("OS signature tool unavailable or PATH-selected")
 		}

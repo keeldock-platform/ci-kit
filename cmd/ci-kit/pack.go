@@ -120,7 +120,7 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 		if err != nil || result.ExitCode != 0 || !result.CleanupComplete {
 			return 6
 		}
-		if experiment && len(cmd.Argv) >= 2 && cmd.Argv[0] == "node" && cmd.Argv[1] == "ci/canary.mjs" {
+		if experiment && isSyntheticCanary(cmd) {
 			if syntheticCapture(source, result) != nil {
 				fmt.Println("STAGE capture FAIL")
 				return 6
@@ -207,16 +207,26 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 		if u.TimeoutSeconds < 1 || u.TimeoutSeconds > 21600 {
 			return 2
 		}
-		unitCtx, cancel := context.WithTimeout(ctx, time.Duration(u.TimeoutSeconds)*time.Second)
 		code := func() int {
-			if state := contextExit(unitCtx); state != 0 {
+			if state := contextExit(ctx); state != 0 {
 				return state
 			}
-			if before(unitCtx, inv.Variant) != nil {
-				if state := contextExit(unitCtx); state != 0 {
-					return state
-				}
+			// Native readiness has its own finite budget; source deadlines begin
+			// only after readiness, while both remain children of the job.
+			readyCtx, readyCancel := context.WithTimeout(ctx, 7*time.Minute)
+			readyErr := before(readyCtx, inv.Variant)
+			readyState := contextExit(readyCtx)
+			readyCancel()
+			if readyState != 0 {
+				return readyState
+			}
+			if readyErr != nil {
 				return 3
+			}
+			unitCtx, cancel := context.WithTimeout(ctx, time.Duration(u.TimeoutSeconds)*time.Second)
+			defer cancel()
+			if state := contextExit(unitCtx); state != 0 {
+				return state
 			}
 			source := origins[inv.Unit]
 			if source == "" {
@@ -319,7 +329,6 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 			allReports = append(allReports, reports...)
 			return 0
 		}()
-		cancel()
 		if diagnosticMode {
 			diagnostic(ctx, diagnosticStage{Slot: slot, Code: code})
 		}

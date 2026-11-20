@@ -117,3 +117,41 @@ func TestHostedPackStopsCombinedRealChildrenAtUnitDeadline(t *testing.T) {
 		t.Fatalf("combined real children escaped unit deadline: got %d", code)
 	}
 }
+
+func TestNativeReadinessPrecedesFreshUnitBudget(t *testing.T) {
+	root := t.TempDir()
+	unit := catalog.Unit{ID: "sample", TimeoutSeconds: 1, Checks: map[string]catalog.Check{"format": {}}}
+	inv := planner.Invocation{Unit: "sample", Check: "format", Commands: []catalog.Command{{Argv: []string{"probe"}}}}
+	ready := false
+	before := func(ctx context.Context, _ string) error {
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) < 6*time.Minute {
+			t.Fatal("readiness budget")
+		}
+		time.Sleep(1100 * time.Millisecond)
+		ready = true
+		return nil
+	}
+	run := func(ctx context.Context, _ catalog.Command, _ string) int {
+		deadline, ok := ctx.Deadline()
+		if !ready || !ok || time.Until(deadline) < 800*time.Millisecond {
+			t.Fatal("source budget started before readiness")
+		}
+		return 0
+	}
+	if got := runChecks(context.Background(), root, t.TempDir(), "ios-simulator", []catalog.Unit{unit}, map[string]string{"sample": root}, []planner.Invocation{inv}, false, run, before); got != 0 {
+		t.Fatal(got)
+	}
+}
+func TestNativeReadinessRetainsParentCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	root := t.TempDir()
+	unit := catalog.Unit{ID: "sample", TimeoutSeconds: 1, Checks: map[string]catalog.Check{"format": {}}}
+	inv := planner.Invocation{Unit: "sample", Check: "format"}
+	before := func(ready context.Context, _ string) error { cancel(); <-ready.Done(); return ready.Err() }
+	got := runChecks(ctx, root, t.TempDir(), "ios-simulator", []catalog.Unit{unit}, map[string]string{"sample": root}, []planner.Invocation{inv}, false, func(context.Context, catalog.Command, string) int { t.Fatal("source after cancel"); return 0 }, before)
+	if got != 7 {
+		t.Fatal(got)
+	}
+}

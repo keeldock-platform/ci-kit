@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"github.com/keeldock-platform/ci-kit/internal/catalog"
 	"github.com/keeldock-platform/ci-kit/internal/process"
 	"path/filepath"
 )
@@ -35,4 +36,8 @@ func syntheticFailureClass(result process.Result) int {
 		}
 	}
 	return 0
+}
+
+func isSyntheticCanary(cmd catalog.Command) bool {
+	return len(cmd.Argv) >= 2 && cmd.Argv[0] == "node" && cmd.Argv[1] == "ci/canary.mjs"
 }
