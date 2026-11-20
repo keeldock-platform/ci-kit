@@ -24,9 +24,12 @@ const manager = require('../../../public-android-tool/lib/emulator-manager.js');
     await manager.createAvd('x86_64', name, '2', '', false, true, '512M', 'pixel_6', '2048M', '', '36', 'google_apis');
     launched = true;
     await manager.launchEmulator(name, true, false, true, 600, '-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel on', false, 5554);
-    console.log('STAGE public-android PASS');
   } finally {
-    if (launched) await manager.killEmulator(5554);
+    if (launched) {
+      await manager.killEmulator(5554);
+      execFileSync(path.join(sdk, 'platform-tools/adb'), ['-s', 'emulator-5554', 'wait-for-disconnect'], {stdio:'inherit', timeout:30000});
+    }
     if (created) execFileSync(path.join(sdk, 'cmdline-tools/latest/bin/avdmanager'), ['delete', 'avd', '-n', name], {stdio:'inherit', timeout:30000});
   }
+  console.log('STAGE public-android PASS');
 })().catch(error => {console.error(error); process.exitCode = 1;});
