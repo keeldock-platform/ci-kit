@@ -161,10 +161,17 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 		var hook struct {
 			Code            *int `json:"code"`
 			CaptureControls int  `json:"capture_controls"`
+			Gate            int  `json:"gate"`
 		}
 		raw, readErr := readRegular(state.Result, 1024)
 		if readErr == nil && config.Decode(raw, &hook, 1024) == nil && hook.Code != nil && *hook.Code >= 0 && *hook.Code <= 8 {
+			if hook.Gate < 0 || hook.Gate > 28 {
+				return 6
+			}
 			if *hook.Code != 0 {
+				if diagnosticRequested(ctx) {
+					fmt.Printf("ANDROID_NATIVE_GATE %d\n", hook.Gate)
+				}
 				return *hook.Code
 			}
 			if e != nil || result.ExitCode != 0 || !result.CleanupComplete {
@@ -184,6 +191,9 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 				}
 				for i := 0; i < expected; i++ {
 					fmt.Println("STAGE capture PASS")
+				}
+				if !androidCompletedSlots(ctx, selected, invocations) {
+					return 6
 				}
 			}
 		} else {
@@ -252,7 +262,7 @@ func nativeHook(ctx context.Context) int {
 	}
 	sdk := os.Getenv("ANDROID_HOME")
 	if !filepath.IsAbs(sdk) {
-		return writeHookResult(state.Result, 3)
+		return writeHookGate(state.Result, 21)
 	}
 	out, e := host(ctx, []string{filepath.Join(sdk, "cmdline-tools", "latest", "bin", "sdkmanager"), "--list_installed"}, ".", 2*time.Minute, nil)
 	adb := filepath.Join(sdk, "platform-tools", "adb")
@@ -261,10 +271,29 @@ func nativeHook(ctx context.Context) int {
 	apiOut, apiErr := host(ctx, []string{adb, "-s", "emulator-5554", "shell", "getprop", "ro.build.version.sdk"}, ".", 30*time.Second, nil)
 	abiOut, abiErr := host(ctx, []string{adb, "-s", "emulator-5554", "shell", "getprop", "ro.product.cpu.abi"}, ".", 30*time.Second, nil)
 	nameOut, nameErr := host(ctx, []string{adb, "-s", "emulator-5554", "emu", "avd", "name"}, ".", 30*time.Second, nil)
-	if stateErr != nil || bootErr != nil || apiErr != nil || abiErr != nil || nameErr != nil || strings.TrimSpace(string(apiOut)) != strconv.Itoa(state.API) || strings.TrimSpace(string(abiOut)) != "x86_64" || strings.TrimSpace(string(nameOut)) != "ci-api-"+strconv.Itoa(state.API)+"\nOK" || strings.TrimSpace(string(stateOut)) != "device" || strings.TrimSpace(string(bootOut)) != "1" {
-		return writeHookResult(state.Result, 3)
+
+	if stateErr != nil || strings.TrimSpace(string(stateOut)) != "device" {
+		return writeHookGate(state.Result, 22)
 	}
-	if e == nil && packs.VerifyAndroidPackages(out, state.Packages) == nil && packs.VerifySDKFiles(ctx, sdk, state.ToolSHA256) == nil {
+	if bootErr != nil || strings.TrimSpace(string(bootOut)) != "1" {
+		return writeHookGate(state.Result, 23)
+	}
+	if apiErr != nil || strings.TrimSpace(string(apiOut)) != strconv.Itoa(state.API) {
+		return writeHookGate(state.Result, 24)
+	}
+	if abiErr != nil || strings.TrimSpace(string(abiOut)) != "x86_64" {
+		return writeHookGate(state.Result, 25)
+	}
+	if nameErr != nil || strings.TrimSpace(string(nameOut)) != "ci-api-"+strconv.Itoa(state.API)+"\nOK" {
+		return writeHookGate(state.Result, 26)
+	}
+	if e != nil || packs.VerifyAndroidPackages(out, state.Packages) != nil {
+		return writeHookGate(state.Result, 27)
+	}
+	if packs.VerifySDKFiles(ctx, sdk, state.ToolSHA256) != nil {
+		return writeHookGate(state.Result, 28)
+	}
+	{
 		run := androidCommandRunner(state, &index, &captureControls)
 		code = runChecks(state.executionContext(ctx), state.Root, state.Private, "android-emulator", state.Units, state.Origins, state.Selected, state.Admission, run, func(context.Context, string) error { return nil })
 	}
@@ -272,6 +301,10 @@ func nativeHook(ctx context.Context) int {
 }
 func writeHookResult(path string, code int) int { return writeHookResultWithCaptures(path, code, 0) }
 func writeHookResultWithCaptures(path string, code, captures int) int {
+	return writeHookOutcome(path, code, captures, 0)
+}
+func writeHookGate(path string, gate int) int { return writeHookOutcome(path, 3, 0, gate) }
+func writeHookOutcome(path string, code, captures, gate int) int {
 	f, e := process.CreatePrivateFile(path)
 	if e != nil {
 		return 6
@@ -279,7 +312,8 @@ func writeHookResultWithCaptures(path string, code, captures int) int {
 	raw, _ := json.Marshal(struct {
 		Code            int `json:"code"`
 		CaptureControls int `json:"capture_controls"`
-	}{code, captures})
+		Gate            int `json:"gate"`
+	}{code, captures, gate})
 	_, e = f.Write(raw)
 	closeErr := f.Close()
 	if e != nil || closeErr != nil {
@@ -303,21 +337,27 @@ func nativePreflight(ctx context.Context) int {
 	}
 	sdk := os.Getenv("ANDROID_HOME")
 	if !filepath.IsAbs(sdk) {
-		return writeHookResult(state.Result, 3)
+		return writeHookGate(state.Result, 11)
 	}
 	metadataPath, e := config.SafePath(sdk, "cmdline-tools/latest/source.properties")
 	if e != nil {
-		return writeHookResult(state.Result, 3)
+		return writeHookGate(state.Result, 12)
 	}
 	metadata, e := readRegular(metadataPath, 65536)
 	if e != nil || packs.VerifyAndroidCommandLine(metadata, state.CommandLineToolsVersion) != nil {
-		return writeHookResult(state.Result, 3)
+		return writeHookGate(state.Result, 13)
 	}
 	index := 200000
 	host := capturedExecutor(state.Root, state.CaptureDirectory, &index)
 	out, e := host(ctx, []string{filepath.Join(sdk, "cmdline-tools", "latest", "bin", "sdkmanager"), "--list_installed"}, ".", 2*time.Minute, nil)
-	if e != nil || packs.VerifyAndroidPackages(out, state.Packages) != nil || packs.VerifySDKFiles(ctx, sdk, state.ToolSHA256) != nil {
-		return writeHookResult(state.Result, 3)
+	if e != nil {
+		return writeHookGate(state.Result, 14)
+	}
+	if packs.VerifyAndroidPackages(out, state.Packages) != nil {
+		return writeHookGate(state.Result, 15)
+	}
+	if packs.VerifySDKFiles(ctx, sdk, state.ToolSHA256) != nil {
+		return writeHookGate(state.Result, 16)
 	}
 	return 0
 }
@@ -365,4 +405,29 @@ func androidCommandRunner(state androidState, index, captureControls *int) func(
 		}
 		return 0
 	}
+}
+
+func androidCompletedSlots(ctx context.Context, selected, completed []planner.Invocation) bool {
+	slots := []int{}
+	seen := map[int]bool{}
+	for _, done := range completed {
+		match := -1
+		for slot, inv := range selected {
+			if inv.ID == done.ID && inv.Variant == done.Variant && inv.Shard == done.Shard {
+				if match >= 0 {
+					return false
+				}
+				match = slot
+			}
+		}
+		if match < 0 || seen[match] {
+			return false
+		}
+		seen[match] = true
+		slots = append(slots, match)
+	}
+	for _, slot := range slots {
+		diagnostic(ctx, diagnosticStage{Slot: slot, Code: 0})
+	}
+	return true
 }

@@ -69,7 +69,7 @@ function Expand-VerifiedZip([string]$archive, [string]$tree) {
   }
 }
 function Test-ArchiveRefusals([string]$base) {
-  foreach ($kind in @('positive', 'traversal', 'absolute', 'duplicate', 'symlink', 'oversize', 'forged-size')) {
+  foreach ($kind in @('positive', 'traversal', 'absolute', 'duplicate', 'symlink', 'oversize', 'forged-empty', 'forged-size')) {
     $probe = Join-Path $base ('probe-' + $kind)
     $null = New-Item -ItemType Directory -Path $probe
     $probeZip = Join-Path $base ('probe-' + $kind + '.zip')
@@ -94,19 +94,22 @@ function Test-ArchiveRefusals([string]$base) {
         } finally { $stream.Dispose() }
       }
     } finally { $zip.Dispose() }
-    if ($kind -eq 'forged-size') {
+    if ($kind -in @('forged-empty','forged-size')) {
+      $advertised = if ($kind -eq 'forged-empty') { [uint32]0 } else { [uint32]2 }
       $bytes = [System.IO.File]::ReadAllBytes($probeZip)
       for ($i = 0; $i -le $bytes.Length - 24; $i++) {
         $sig = [BitConverter]::ToUInt32($bytes, $i)
-        if ($sig -eq 0x04034b50) { [Array]::Copy([BitConverter]::GetBytes([uint32]0), 0, $bytes, $i + 22, 4) }
-        if ($sig -eq 0x02014b50) { [Array]::Copy([BitConverter]::GetBytes([uint32]0), 0, $bytes, $i + 24, 4) }
+        if ($sig -eq 0x04034b50) { [Array]::Copy([BitConverter]::GetBytes($advertised), 0, $bytes, $i + 22, 4) }
+        if ($sig -eq 0x02014b50) { [Array]::Copy([BitConverter]::GetBytes($advertised), 0, $bytes, $i + 24, 4) }
       }
       [System.IO.File]::WriteAllBytes($probeZip, $bytes)
     }
     $refused = $false
-    try { Expand-VerifiedZip $probeZip $probe } catch { $refused = $true }
-    if (($kind -eq 'positive' -and $refused) -or ($kind -ne 'positive' -and -not $refused)) { throw 'archive refusal regression' }
+    try { Expand-VerifiedZip $probeZip $probe } catch { $refused = $true; if ($kind -eq 'positive') { Write-Output ('PUBLIC_ARCHIVE_ERROR ' + $_.Exception.Message) } }
+    if (($kind -eq 'positive' -and $refused) -or ($kind -notin @('positive','forged-empty') -and -not $refused)) { throw ('public archive refusal regression: ' + $kind) }
     if ($kind -eq 'positive' -and [System.IO.File]::ReadAllBytes((Join-Path $probe 'dir/file'))[0] -ne 42) { throw 'archive positive regression' }
+    if ($kind -eq 'forged-empty' -and -not $refused -and (Get-Item -LiteralPath (Join-Path $probe 'file')).Length -ne 0) { throw 'empty archive decoder emitted bytes' }
+    Write-Output ('PUBLIC_ARCHIVE_CASE ' + $kind + ' PASS')
     Remove-Item -LiteralPath $probe -Recurse -Force
     Remove-Item -LiteralPath $probeZip -Force
   }

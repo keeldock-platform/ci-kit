@@ -121,3 +121,20 @@ func TestSharedSyntheticEnvironmentStaysExperimentOnly(t *testing.T) {
 		t.Fatal("production accepted shared environment")
 	}
 }
+
+func TestAndroidCompletedSlotsRetainVariantAndShardIdentity(t *testing.T) {
+	selected := []planner.Invocation{{ID: "native-unit@android-emulator", Variant: "api35", Shard: "1/2"}, {ID: "native-unit@android-emulator", Variant: "api36", Shard: "1/2"}, {ID: "native-unit@android-emulator", Variant: "api35", Shard: "2/2"}}
+	rows := []diagnosticStage{}
+	ctx := context.WithValue(context.Background(), diagnosticKey{}, func(s diagnosticStage) { rows = append(rows, s) })
+	if !androidCompletedSlots(ctx, selected, selected[:1]) || len(rows) != 1 || rows[0].Slot != 0 {
+		t.Fatal("unexecuted API or shard reported")
+	}
+	rows = nil
+	unknown := planner.Invocation{ID: selected[0].ID, Variant: "api37", Shard: "1/2"}
+	if androidCompletedSlots(ctx, selected, []planner.Invocation{unknown}) || len(rows) != 0 {
+		t.Fatal("unknown invocation reported")
+	}
+	if androidCompletedSlots(ctx, selected, []planner.Invocation{selected[0], selected[0]}) || len(rows) != 0 {
+		t.Fatal("duplicate invocation reported")
+	}
+}
