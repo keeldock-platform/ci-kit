@@ -1,9 +1,10 @@
 # Called only in public tool staging, before any synthetic source credential.
-function Invoke-PublicTool([string]$Tool, [string[]]$Arguments, [int]$Seconds = 30, [string]$ConfinedGit = '') {
+function Invoke-PublicTool([string]$Tool, [string[]]$Arguments, [int]$Seconds = 30, [string]$ConfinedGit = '', [bool]$ClosedInput = $false) {
   $info = [System.Diagnostics.ProcessStartInfo]::new($Tool)
   $info.UseShellExecute = $false
   $info.RedirectStandardOutput = $true
   $info.RedirectStandardError = $true
+  $info.RedirectStandardInput = $ClosedInput
   foreach ($argument in $Arguments) { $info.ArgumentList.Add($argument) }
   if ($ConfinedGit) {
     # Match internal/process.Environment for the public Git verification probe.
@@ -25,6 +26,7 @@ function Invoke-PublicTool([string]$Tool, [string[]]$Arguments, [int]$Seconds = 
     try { $null = $proc.Start(); $started = $true } catch {
       return @{ Code=-1; Out=''; Err=('public native start failed: ' + $_.Exception.Message) }
     }
+    if ($ClosedInput) { $proc.StandardInput.Close() }
     $streams = @(
       @{ Reader=$proc.StandardOutput; Buffer=[char[]]::new(4096); Text=[System.Text.StringBuilder]::new(); Limit=1MB; Done=$false },
       @{ Reader=$proc.StandardError; Buffer=[char[]]::new(4096); Text=[System.Text.StringBuilder]::new(); Limit=64KB; Done=$false }
@@ -56,6 +58,8 @@ function Test-PublicSignatureCandidate([string]$Tool, [string]$Git, [string]$Con
   Write-Host ('PUBLIC_OPENSSH ' + $Label + ' ' + $version.Out + $version.Err)
   $probe = Invoke-PublicTool $Tool $Arguments
   Write-Host ('PUBLIC_FIND_PRINCIPALS ' + $Label + ' exit=' + $probe.Code + "`n" + $probe.Out + $probe.Err)
+  $confined = Invoke-PublicTool $Tool $Arguments 30 $Git $true
+  Write-Host ('PUBLIC_FIND_PRINCIPALS confined-closed-input ' + $Label + ' exit=' + $confined.Code + "`n" + $confined.Out + $confined.Err)
   # Git's stderr handling hides some keygen failures. Keep the direct verbose
   # probe above, but select only after the real Git invocation also verifies.
   $verify = Invoke-PublicTool $Git @('--no-replace-objects','-c','core.hooksPath=NUL','-c','core.fsmonitor=false','-c','credential.helper=','-c','diff.external=','-C',$Control,'-c','gpg.format=ssh','-c',('gpg.ssh.program=' + $Tool),'-c','gpg.program=false','-c','gpg.x509.program=false','-c',('gpg.ssh.allowedSignersFile=' + $Signers),'-c','gpg.ssh.revocationFile=','-c','gpg.minTrustLevel=fully','verify-commit','HEAD') 30 $Git
@@ -101,7 +105,11 @@ function Select-PublicSignatureTool([string]$Git, [string]$Base, [string]$Arch) 
   try {
     Invoke-WebRequest -Uri ('https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/' + $asset[0]) -OutFile $archive -TimeoutSec 180
     if ((Get-Item -LiteralPath $archive).Length -gt 128MB -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $asset[1]) { throw 'portable signature digest' }
-    $extract = Invoke-PublicTool $archive @('-y', ('-o' + $tree)) 180
+    # Extract the verified archive as data. The SFX launcher also runs a GUI
+    # post-install command, which failed in the source-free hosted experiment.
+    $extractor = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+    $extract = Invoke-PublicTool $extractor @('x', $archive, ('-o' + $tree), '-y', '-bb0', '-bso0', '-bsp0') 180
+    Write-Host ('PUBLIC_PORTABLE_EXTRACT exit=' + $extract.Code + "`n" + $extract.Out + $extract.Err)
     if ($extract.Code -ne 0) { throw 'portable signature extraction' }
     foreach ($entry in @(Get-ChildItem -LiteralPath $tree -Recurse -Force)) {
       if ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'portable signature reparse' }
