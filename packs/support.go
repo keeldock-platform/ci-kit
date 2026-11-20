@@ -51,12 +51,13 @@ type AndroidImage struct {
 	Profile string `json:"profile"`
 }
 type AndroidSupport struct {
-	EmulatorBuild string            `json:"emulator_build"`
-	NDK           string            `json:"ndk"`
-	CMake         string            `json:"cmake"`
-	Images        []AndroidImage    `json:"images"`
-	Packages      map[string]string `json:"packages"`
-	ToolSHA256    map[string]string `json:"tool_sha256"`
+	CommandLineToolsVersion string            `json:"command_line_tools_version"`
+	EmulatorBuild           string            `json:"emulator_build"`
+	NDK                     string            `json:"ndk"`
+	CMake                   string            `json:"cmake"`
+	Images                  []AndroidImage    `json:"images"`
+	Packages                map[string]string `json:"packages"`
+	ToolSHA256              map[string]string `json:"tool_sha256"`
 }
 
 // DecodeSupport shares the strict bounded JSON decoder; private names never
@@ -128,7 +129,7 @@ func DecodeSupport(platform string, data json.RawMessage) (Support, error) {
 			return s, ErrSupport
 		}
 		v := s.Android
-		if !regexp.MustCompile(`^[0-9]{6,12}$`).MatchString(v.EmulatorBuild) || !numericVersion.MatchString(v.NDK) || !numericVersion.MatchString(v.CMake) || len(v.Images) < 2 || len(v.Images) > 64 {
+		if !numericVersion.MatchString(v.CommandLineToolsVersion) || !regexp.MustCompile(`^[0-9]{6,12}$`).MatchString(v.EmulatorBuild) || !numericVersion.MatchString(v.NDK) || !numericVersion.MatchString(v.CMake) || len(v.Images) < 2 || len(v.Images) > 64 {
 			return s, ErrSupport
 		}
 		apis := map[int]bool{}
@@ -158,7 +159,7 @@ func DecodeSupport(platform string, data json.RawMessage) (Support, error) {
 				return s, ErrSupport
 			}
 		}
-		for _, key := range []string{"platform-tools", "emulator", "build-tools;37.0.0", "cmdline-tools;latest", "ndk;" + v.NDK, "cmake;" + v.CMake} {
+		for _, key := range []string{"platform-tools", "emulator", "build-tools;37.0.0", "ndk;" + v.NDK, "cmake;" + v.CMake} {
 			if v.Packages[key] == "" {
 				return s, ErrSupport
 			}

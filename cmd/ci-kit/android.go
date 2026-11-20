@@ -19,19 +19,20 @@ import (
 )
 
 type androidState struct {
-	API              int                  `json:"api"`
-	SchemaVersion    int                  `json:"schema_version"`
-	Root             string               `json:"root"`
-	CaptureDirectory string               `json:"capture_directory"`
-	Private          string               `json:"private"`
-	Units            []catalog.Unit       `json:"units"`
-	Origins          map[string]string    `json:"origins"`
-	Selected         []planner.Invocation `json:"selected"`
-	Admission        bool                 `json:"admission"`
-	Diagnostic       bool                 `json:"diagnostic"`
-	Packages         map[string]string    `json:"packages"`
-	ToolSHA256       map[string]string    `json:"tool_sha256"`
-	Result           string               `json:"result"`
+	API                     int                  `json:"api"`
+	SchemaVersion           int                  `json:"schema_version"`
+	Root                    string               `json:"root"`
+	CaptureDirectory        string               `json:"capture_directory"`
+	Private                 string               `json:"private"`
+	Units                   []catalog.Unit       `json:"units"`
+	Origins                 map[string]string    `json:"origins"`
+	Selected                []planner.Invocation `json:"selected"`
+	Admission               bool                 `json:"admission"`
+	Diagnostic              bool                 `json:"diagnostic"`
+	Packages                map[string]string    `json:"packages"`
+	ToolSHA256              map[string]string    `json:"tool_sha256"`
+	Result                  string               `json:"result"`
+	CommandLineToolsVersion string               `json:"command_line_tools_version"`
 }
 
 func androidReady(ctx context.Context, run packs.Execute) error {
@@ -105,7 +106,7 @@ func runAndroid(ctx context.Context, root, private string, units []catalog.Unit,
 			continue
 		}
 		delete(groups, image.API)
-		state := androidState{SchemaVersion: 1, API: image.API, Root: root, Private: private, Units: units, Origins: origins, Selected: invocations, Admission: admission, Diagnostic: diagnosticRequested(ctx) && !admission, CaptureDirectory: filepath.Join(private, "android-api-"+strconv.Itoa(image.API)), Packages: support.Packages, ToolSHA256: support.ToolSHA256, Result: filepath.Join(private, "android-result-"+strconv.Itoa(image.API)+".json")}
+		state := androidState{SchemaVersion: 1, API: image.API, Root: root, Private: private, Units: units, Origins: origins, Selected: invocations, Admission: admission, Diagnostic: diagnosticRequested(ctx) && !admission, CaptureDirectory: filepath.Join(private, "android-api-"+strconv.Itoa(image.API)), Packages: support.Packages, CommandLineToolsVersion: support.CommandLineToolsVersion, ToolSHA256: support.ToolSHA256, Result: filepath.Join(private, "android-result-"+strconv.Itoa(image.API)+".json")}
 		if e := process.MakePrivateDir(state.CaptureDirectory); e != nil {
 			return 6
 		}
@@ -293,6 +294,14 @@ func nativePreflight(ctx context.Context) int {
 	}
 	sdk := os.Getenv("ANDROID_HOME")
 	if !filepath.IsAbs(sdk) {
+		return writeHookResult(state.Result, 3)
+	}
+	metadataPath, e := config.SafePath(sdk, "cmdline-tools/latest/source.properties")
+	if e != nil {
+		return writeHookResult(state.Result, 3)
+	}
+	metadata, e := readRegular(metadataPath, 65536)
+	if e != nil || packs.VerifyAndroidCommandLine(metadata, state.CommandLineToolsVersion) != nil {
 		return writeHookResult(state.Result, 3)
 	}
 	index := 200000
