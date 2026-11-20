@@ -42,7 +42,19 @@ type workflow struct {
 var bad = errors.New("synthetic wiring refused")
 
 // Check requires named forwarding, immutable bindings and source-free bootstrap.
-func Check(caller, kit []byte, sha, tip string) error {
+// The optional base is independently read from the admitted source branch; omission
+// retains the original same-commit fixture contract.
+func Check(caller, kit []byte, sha, tip string, admittedBase ...string) error {
+	base := tip
+	if len(admittedBase) > 1 {
+		return bad
+	}
+	if len(admittedBase) == 1 {
+		base = admittedBase[0]
+	}
+	if !protocol.SHA(base) {
+		return bad
+	}
 	var c, k workflow
 	if yaml.Unmarshal(caller, &c) != nil || yaml.Unmarshal(kit, &k) != nil || !protocol.SHA(sha) || !protocol.SHA(tip) {
 		return bad
@@ -114,7 +126,7 @@ func Check(caller, kit []byte, sha, tip string) error {
 		return bad
 	}
 	var inputs map[string]string
-	if json.Unmarshal([]byte(call.With["request"]), &inputs) != nil || inputs["source_sha"] != tip || inputs["base_sha"] != tip {
+	if json.Unmarshal([]byte(call.With["request"]), &inputs) != nil || inputs["source_sha"] != tip || inputs["base_sha"] != base {
 		return bad
 	}
 	d := protocol.Dispatch{Ref: "experiment/ci-wiring", Inputs: inputs}

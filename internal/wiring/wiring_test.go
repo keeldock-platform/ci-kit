@@ -41,6 +41,32 @@ func TestSyntheticWiringRefusals(t *testing.T) {
 			}
 		})
 	}
+
+	base := strings.Repeat("4", 40)
+	d, e = protocol.NewDispatch("canary", tip, base, "full", "feedback", "all", "all", "11111111-1111-4111-8111-111111111111")
+	if e != nil {
+		t.Fatal(e)
+	}
+	nextRequest, _ := json.Marshal(d.Inputs)
+	nextQuoted, _ := json.Marshal(string(nextRequest))
+	next := []byte(strings.Replace(string(c), string(quoted), string(nextQuoted), 1))
+	if Check(next, k, sha, tip, base) != nil {
+		t.Fatal("bound experiment source and admitted base refused")
+	}
+	if Check(next, k, sha, tip) == nil {
+		t.Fatal("unbound distinct base accepted")
+	}
+	for _, expected := range []string{tip, strings.Repeat("5", 40), "invalid"} {
+		if Check(next, k, sha, tip, expected) == nil {
+			t.Fatal("wrong admitted base accepted")
+		}
+	}
+	if Check(next, k, sha, strings.Repeat("3", 40), base) == nil {
+		t.Fatal("wrong experiment source accepted")
+	}
+	if Check(next, k, sha, tip, base, base) == nil {
+		t.Fatal("ambiguous base accepted")
+	}
 	if Check(c, k, sha, strings.Repeat("3", 40)) == nil {
 		t.Fatal("stale tip accepted")
 	}
