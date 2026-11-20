@@ -33,7 +33,7 @@ function Expand-VerifiedZip([string]$archive, [string]$tree) {
       $name = $entry.FullName
       if ($name -match '\\|:|[\x00-\x1f]' -or $name.StartsWith('/') -or ($name.Split('/') | Where-Object { $_ -eq '..' -or $_ -eq '.' }) -or (($entry.ExternalAttributes -shr 16) -band 0xf000) -eq 0xa000 -or ($entry.ExternalAttributes -band 0x400)) { throw 'archive path or link' }
       $target = [System.IO.Path]::GetFullPath((Join-Path $tree $name))
-      if (-not $target.StartsWith($tree + '\', [System.StringComparison]::OrdinalIgnoreCase)) { throw 'archive escape' }
+      if (-not $target.StartsWith($tree + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'archive escape' }
       if ($expected.ContainsKey($name)) { throw 'archive duplicate' }
       $expected[$name] = $null
       $total += $entry.Length
