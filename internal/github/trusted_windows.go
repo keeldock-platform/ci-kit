@@ -53,8 +53,12 @@ func trustedPath(path string) bool {
 				continue
 			}
 			sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart)).String()
-			write := windows.ACCESS_MASK(windows.GENERIC_WRITE | windows.GENERIC_ALL | windows.WRITE_DAC | windows.WRITE_OWNER | windows.DELETE | windows.FILE_WRITE_DATA | windows.FILE_APPEND_DATA | windows.FILE_WRITE_EA | windows.FILE_WRITE_ATTRIBUTES)
-			if ace.Mask&write != 0 && sid != uid && sid != "S-1-5-18" && sid != "S-1-5-32-544" && sid != ownerID {
+			info, statErr := os.Stat(p)
+			if statErr != nil {
+				return false
+			}
+			write := pathMutationRights(info.IsDir())
+			if uint32(ace.Mask)&write != 0 && sid != uid && sid != "S-1-5-18" && sid != "S-1-5-32-544" && sid != ownerID {
 				return false
 			}
 		}
