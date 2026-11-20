@@ -1,22 +1,64 @@
 # Called only in public tool staging, before any synthetic source credential.
-function Invoke-PublicTool([string]$Tool, [string[]]$Arguments, [int]$Seconds = 30) {
+function Invoke-PublicTool([string]$Tool, [string[]]$Arguments, [int]$Seconds = 30, [string]$ConfinedGit = '') {
   $info = [System.Diagnostics.ProcessStartInfo]::new($Tool)
   $info.UseShellExecute = $false
   $info.RedirectStandardOutput = $true
   $info.RedirectStandardError = $true
   foreach ($argument in $Arguments) { $info.ArgumentList.Add($argument) }
+  if ($ConfinedGit) {
+    # Match internal/process.Environment for the public Git verification probe.
+    $allowed = @('PATH','HOME','USERPROFILE','SYSTEMROOT','WINDIR','TMP','TEMP','TMPDIR','LANG','LC_ALL','TZ','CARGO_HOME','RUSTUP_HOME','CARGO_TARGET_DIR','GOCACHE','GOMODCACHE','GOPATH','JAVA_HOME','ANDROID_HOME','ANDROID_SDK_ROOT','DEVELOPER_DIR','SDKROOT','CI','NO_COLOR','TERM')
+    $info.Environment.Clear()
+    foreach ($entry in [Environment]::GetEnvironmentVariables().GetEnumerator()) {
+      if ($entry.Key.ToUpperInvariant() -in $allowed) { $info.Environment[$entry.Key.ToUpperInvariant()] = $entry.Value }
+    }
+    $info.Environment['PATH'] = Split-Path -Parent $ConfinedGit
+    $info.Environment['GIT_CONFIG_NOSYSTEM'] = '1'
+    $info.Environment['GIT_CONFIG_GLOBAL'] = 'NUL'
+    $info.Environment['GIT_TERMINAL_PROMPT'] = '0'
+    $info.Environment['GIT_TRACE2_EVENT'] = '1'
+  }
   $proc = [System.Diagnostics.Process]::new()
   $proc.StartInfo = $info
+  $started = $false
   try {
-    $null = $proc.Start()
-    $stdout = $proc.StandardOutput.ReadToEndAsync()
-    $stderr = $proc.StandardError.ReadToEndAsync()
-    if (-not $proc.WaitForExit($Seconds * 1000)) { $proc.Kill($true); $proc.WaitForExit(); throw 'public tool deadline' }
-    $out = $stdout.GetAwaiter().GetResult()
-    $err = $stderr.GetAwaiter().GetResult()
-    if ($out.Length -gt 1MB -or $err.Length -gt 64KB) { throw 'public tool output bound' }
-    return @{ Code=$proc.ExitCode; Out=$out; Err=$err }
-  } finally { $proc.Dispose() }
+    $null = $proc.Start(); $started = $true
+    $streams = @(
+      @{ Reader=$proc.StandardOutput; Buffer=[char[]]::new(4096); Text=[System.Text.StringBuilder]::new(); Limit=1MB; Done=$false },
+      @{ Reader=$proc.StandardError; Buffer=[char[]]::new(4096); Text=[System.Text.StringBuilder]::new(); Limit=64KB; Done=$false }
+    )
+    foreach ($stream in $streams) { $stream.Task = $stream.Reader.ReadAsync($stream.Buffer, 0, $stream.Buffer.Length) }
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    while (-not $proc.HasExited -or -not $streams[0].Done -or -not $streams[1].Done) {
+      if ($clock.Elapsed.TotalSeconds -ge $Seconds) { throw 'public tool deadline' }
+      foreach ($stream in $streams) {
+        if ($stream.Done -or -not $stream.Task.IsCompleted) { continue }
+        $count = $stream.Task.GetAwaiter().GetResult()
+        if ($count -eq 0) { $stream.Done=$true; continue }
+        if ($stream.Text.Length + $count -gt $stream.Limit) { throw 'public tool output bound' }
+        $null = $stream.Text.Append($stream.Buffer, 0, $count)
+        $stream.Task = $stream.Reader.ReadAsync($stream.Buffer, 0, $stream.Buffer.Length)
+      }
+      Start-Sleep -Milliseconds 10
+    }
+    return @{ Code=$proc.ExitCode; Out=$streams[0].Text.ToString(); Err=$streams[1].Text.ToString() }
+  } finally {
+    if ($started -and -not $proc.HasExited) { $proc.Kill($true) }
+    $proc.Dispose()
+  }
+}
+function Test-PublicSignatureCandidate([string]$Tool, [string]$Git, [string]$Control, [string]$Signers, [string[]]$Arguments, [string]$Label) {
+  if (-not (Test-Path -LiteralPath $Tool -PathType Leaf)) { Write-Host ('PUBLIC_FIND_PRINCIPALS ' + $Label + ' missing'); return $false }
+  $ssh = Join-Path (Split-Path -Parent $Tool) 'ssh.exe'
+  $version = Invoke-PublicTool $ssh @('-V')
+  Write-Host ('PUBLIC_OPENSSH ' + $Label + ' ' + $version.Out + $version.Err)
+  $probe = Invoke-PublicTool $Tool $Arguments
+  Write-Host ('PUBLIC_FIND_PRINCIPALS ' + $Label + ' exit=' + $probe.Code + "`n" + $probe.Out + $probe.Err)
+  # Git's stderr handling hides some keygen failures. Keep the direct verbose
+  # probe above, but select only after the real Git invocation also verifies.
+  $verify = Invoke-PublicTool $Git @('--no-replace-objects','-c','core.hooksPath=NUL','-c','core.fsmonitor=false','-c','credential.helper=','-c','diff.external=','-C',$Control,'-c','gpg.format=ssh','-c',('gpg.ssh.program=' + $Tool),'-c','gpg.program=false','-c','gpg.x509.program=false','-c',('gpg.ssh.allowedSignersFile=' + $Signers),'-c','gpg.ssh.revocationFile=','-c','gpg.minTrustLevel=fully','verify-commit','HEAD') 30 $Git
+  Write-Host ('PUBLIC_GIT_VERIFY ' + $Label + ' exit=' + $verify.Code + "`n" + $verify.Out + $verify.Err)
+  return ($probe.Code -eq 0 -and $probe.Out.Trim() -and $verify.Code -eq 0)
 }
 function Select-PublicSignatureTool([string]$Git, [string]$Base, [string]$Arch) {
   $control = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
@@ -44,12 +86,7 @@ function Select-PublicSignatureTool([string]$Git, [string]$Base, [string]$Arch) 
   $verifyTime = [DateTimeOffset]::FromUnixTimeSeconds([long]$time.Out.Trim()).UtcDateTime.ToString('yyyyMMddHHmmss')
   $arguments = @('-vvv','-Y','find-principals','-f',$signers,'-s',$sig,('-Overify-time=' + $verifyTime))
   $system = Join-Path $env:SystemRoot 'System32/OpenSSH/ssh-keygen.exe'
-  $systemSSH = Join-Path $env:SystemRoot 'System32/OpenSSH/ssh.exe'
-  $version = Invoke-PublicTool $systemSSH @('-V')
-  Write-Host ('PUBLIC_OPENSSH system ' + $version.Out + $version.Err)
-  $probe = Invoke-PublicTool $system $arguments
-  Write-Host ('PUBLIC_FIND_PRINCIPALS system exit=' + $probe.Code + "`n" + $probe.Out + $probe.Err)
-  if ($probe.Code -eq 0 -and $probe.Out.Trim()) { return $system }
+  if (Test-PublicSignatureCandidate $system $Git $control $signers $arguments 'system') { return $system }
   # Full PortableGit is required: the pinned MinGit ZIP excludes ssh-keygen.
   $assets = @{
     X64 = @('PortableGit-2.56.1-64-bit.7z.exe','9dd04a608ceb5f6ab32a73709e0ecb159d211da71b697c45ff81f6dd0c6b49c7')
@@ -68,12 +105,7 @@ function Select-PublicSignatureTool([string]$Git, [string]$Base, [string]$Arch) 
       if ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'portable signature reparse' }
     }
     $bundled = Join-Path $tree 'usr/bin/ssh-keygen.exe'
-    $bundledSSH = Join-Path $tree 'usr/bin/ssh.exe'
-    $version = Invoke-PublicTool $bundledSSH @('-V')
-    Write-Host ('PUBLIC_OPENSSH bundled ' + $version.Out + $version.Err)
-    $probe = Invoke-PublicTool $bundled $arguments
-    Write-Host ('PUBLIC_FIND_PRINCIPALS bundled exit=' + $probe.Code + "`n" + $probe.Out + $probe.Err)
-    if ($probe.Code -ne 0 -or -not $probe.Out.Trim()) { throw 'public bundled find-principals failed' }
+    if (-not (Test-PublicSignatureCandidate $bundled $Git $control $signers $arguments 'bundled')) { throw 'public bundled signature verification failed' }
     return $bundled
   } finally {
     if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
