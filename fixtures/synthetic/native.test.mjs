@@ -2,7 +2,7 @@ import {describe,it} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
-import {simulatorModel} from './simctl-query.mjs';
+import {simulatorModel} from './native-simctl-query.mjs';
 import {createRequire} from 'node:module';
 const local = createRequire(path.resolve('package.json'));
 describe('venue',()=>{

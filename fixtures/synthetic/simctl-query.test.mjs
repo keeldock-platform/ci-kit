@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {simulatorModel} from './simctl-query.mjs';
+import {simulatorModel} from './native-simctl-query.mjs';
 test('one infrastructure timeout retries the identical bounded query',()=>{
  let calls=0;
  const model=simulatorModel('owned-device',(tool,args,options)=>{
