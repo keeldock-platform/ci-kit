@@ -314,9 +314,8 @@ func TestConfiguredImmutableCompositionSelectorParity(t *testing.T) {
 		git("-c", "user.name=Synthetic", "-c", "user.email=synthetic@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "Create configured composition fixture")
 		heads[name] = git("rev-parse", "HEAD")
 		host := filepath.Join(t.TempDir(), "checkout")
-		if e := os.CopyFS(host, os.DirFS(root)); e != nil {
-			t.Fatal(e)
-		}
+		// Clone committed objects through Git; copying .git races its transient maintenance locks.
+		git("clone", "--quiet", "--no-hardlinks", root, host)
 		sources[name] = CompositionSource{Root: host, SHA: heads[name]}
 	}
 	working, _, e := LoadCompositionConfigured(ctx, local)
