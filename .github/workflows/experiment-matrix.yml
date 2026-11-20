@@ -116,6 +116,16 @@ jobs:
             echo 'STAGE boundary FAIL'
             exit 1
           fi
+      - name: Android public tool
+        if: matrix.platform == 'android-emulator'
+        uses: $/.github/actions/android-checkout
+      - name: Source-free Android preparation
+        if: matrix.platform == 'android-emulator'
+        shell: bash
+        run: |
+          npm ci --prefix public-android-tool --ignore-scripts --no-audit --no-fund
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          node public-control/fixtures/synthetic/android-support.cjs
       - name: Synthetic secrets ready
         shell: bash
         env:

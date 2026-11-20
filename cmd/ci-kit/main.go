@@ -22,6 +22,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	code := 6
+	if len(os.Args) == 6 && os.Args[1] == "wiring-check" {
+		code = checkWiring(os.Args[2:])
+	}
 	if len(os.Args) == 2 && os.Args[1] == "native-preflight" {
 		code = nativePreflight(ctx)
 	}

@@ -88,7 +88,16 @@ func privateWork(ctx context.Context, c control) (code int) {
 		}
 	}()
 	req := acquire.Request{Map: m, RootSHA: c.Request.Inputs["source_sha"], BaseSHA: c.Request.Inputs["base_sha"], Workspace: filepath.Join(private, "source"), Git: git, CredentialHelper: helper}
-	req.VerifyRepository = func(ctx context.Context, s acquire.Source) error {
+	req.VerifyRepository = func(ctx context.Context, s acquire.Source) (err error) {
+		if experimentRequest(c.Request) {
+			defer func() {
+				if err == nil {
+					fmt.Println("STAGE repository PASS")
+				} else {
+					fmt.Println("STAGE repository FAIL")
+				}
+			}()
+		}
 		client, e := provider.New(os.Getenv(s.SecretSlot), 30*time.Second, nil)
 		if e != nil {
 			return refused
@@ -104,7 +113,16 @@ func privateWork(ctx context.Context, c control) (code int) {
 		}
 		return nil
 	}
-	req.VerifySignatures = func(ctx context.Context, root, sha, base string) error {
+	req.VerifySignatures = func(ctx context.Context, root, sha, base string) (err error) {
+		if experimentRequest(c.Request) {
+			defer func() {
+				if err == nil {
+					fmt.Println("STAGE signature PASS")
+				} else {
+					fmt.Println("STAGE signature FAIL")
+				}
+			}()
+		}
 		wd, e := os.Getwd()
 		if e != nil {
 			return refused
