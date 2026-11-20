@@ -1,0 +1,18 @@
+name: Caller tree
+description: Immutable public tool dependency
+inputs:
+  repository:
+    description: Public candidate input
+    required: true
+  ref:
+    description: Public candidate input
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+        path: caller-control
+        persist-credentials: false

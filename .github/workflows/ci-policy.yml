@@ -1,0 +1,52 @@
+name: CI policy
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      kit_sha:
+        type: string
+        required: true
+permissions: {}
+cache-mode: none
+jobs:
+  policy:
+    name: ci-policy
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Kit
+        uses: $/.github/actions/kit-bootstrap
+        with:
+          kit-sha: ${{ inputs.kit_sha || github.sha }}
+          policy-only: 'true'
+      - name: Caller tree
+        uses: $/.github/actions/caller-checkout
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+      - name: Tools
+        uses: $/.github/actions/policy-tools
+      - name: Source-free checks
+        shell: bash
+        working-directory: public-control
+        env:
+          GOTOOLCHAIN: local
+          REVIEWED_KIT_SHA: ${{ inputs.kit_sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          go test ./...
+          go vet ./...
+          python3 -B -m unittest discover -s tests/integration -p 'test_*.py'
+          python3 -B tests/policy/layout.py --root ../caller-control
+          python3 -B tests/policy/immutable_actions.py --root ../caller-control --kit-sha "$REVIEWED_KIT_SHA"
+          python3 -B tests/policy/immutable_actions.py
+          python3 -B tests/policy/layout.py
+          python3 -B tests/policy/workflow_lint.py --actionlint "$RUNNER_TEMP/policy-tools/actionlint"
+          python3 -B tests/policy/workflow_lint.py --root ../caller-control --actionlint "$RUNNER_TEMP/policy-tools/actionlint"
+          (cd ../caller-control && "$RUNNER_TEMP/policy-tools/gh-actions-lock" --verify --fail-on-warning)
+          mapfile -t workflows < <(python3 -B tests/policy/layout.py --workflow-paths)
+          "$RUNNER_TEMP/policy-tools/zizmor" --no-progress "${workflows[@]}" .github/actions
+          "$RUNNER_TEMP/policy-tools/gh-actions-lock" --verify --fail-on-warning "${workflows[@]}"

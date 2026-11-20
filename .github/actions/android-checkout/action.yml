@@ -1,0 +1,12 @@
+name: Public emulator tool
+description: Immutable public tool dependency
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: reactivecircus/android-emulator-runner
+        ref: a421e43855164a8197daf9d8d40fe71c6996bb0d
+        path: public-android-tool
+        persist-credentials: false
+        fetch-depth: 1

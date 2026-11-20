@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "platform": "macos-x64",
+  "runner": "macos-15-intel",
+  "timeout_minutes": 75,
+  "native_arch": "amd64",
+  "native_os": "darwin"
+}

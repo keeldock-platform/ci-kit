@@ -1,0 +1,836 @@
+name: Validate
+on:
+  workflow_call:
+    inputs:
+      concern:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+      base_sha:
+        required: true
+        type: string
+      mode:
+        required: true
+        type: string
+      purpose:
+        required: true
+        type: string
+      platforms:
+        required: true
+        type: string
+      selector:
+        required: true
+        type: string
+      request_id:
+        required: true
+        type: string
+      kit_api:
+        required: true
+        type: string
+      request_digest:
+        required: true
+        type: string
+      kit_sha:
+        type: string
+        required: true
+    secrets:
+      SOURCE_MAP:
+        required: true
+      SOURCE_READ_01:
+        required: true
+      SOURCE_READ_02:
+        required: false
+      SOURCE_READ_03:
+        required: false
+      SOURCE_READ_04:
+        required: false
+      SOURCE_READ_05:
+        required: false
+      SOURCE_READ_06:
+        required: false
+      SOURCE_READ_07:
+        required: false
+      SOURCE_READ_08:
+        required: false
+      SOURCE_READ_09:
+        required: false
+      SOURCE_READ_10:
+        required: false
+      SOURCE_READ_11:
+        required: false
+      SOURCE_READ_12:
+        required: false
+      SOURCE_READ_13:
+        required: false
+      SOURCE_READ_14:
+        required: false
+      SOURCE_READ_15:
+        required: false
+      SOURCE_READ_16:
+        required: false
+      SOURCE_READ_17:
+        required: false
+      SOURCE_READ_18:
+        required: false
+      SOURCE_READ_19:
+        required: false
+      SOURCE_READ_20:
+        required: false
+      SOURCE_READ_21:
+        required: false
+      SOURCE_READ_22:
+        required: false
+      SOURCE_READ_23:
+        required: false
+      SOURCE_READ_24:
+        required: false
+      SOURCE_READ_25:
+        required: false
+      SOURCE_READ_26:
+        required: false
+      SOURCE_READ_27:
+        required: false
+      SOURCE_READ_28:
+        required: false
+      SOURCE_READ_29:
+        required: false
+      SOURCE_READ_30:
+        required: false
+      SOURCE_READ_31:
+        required: false
+      SOURCE_READ_32:
+        required: false
+permissions: {}
+cache-mode: none
+jobs:
+  preflight:
+    name: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      environment: ${{ steps.guard.outputs.environment }}
+      env-linux-debian: ${{ steps.guard.outputs.env-linux-debian }}
+      env-linux-arch: ${{ steps.guard.outputs.env-linux-arch }}
+      env-macos-arm64: ${{ steps.guard.outputs.env-macos-arm64 }}
+      env-macos-x64: ${{ steps.guard.outputs.env-macos-x64 }}
+      env-windows-x64: ${{ steps.guard.outputs.env-windows-x64 }}
+      env-windows-arm64: ${{ steps.guard.outputs.env-windows-arm64 }}
+      env-ios-simulator: ${{ steps.guard.outputs.env-ios-simulator }}
+      env-android-emulator: ${{ steps.guard.outputs.env-android-emulator }}
+      env-web-linux: ${{ steps.guard.outputs.env-web-linux }}
+      env-server-linux-x64: ${{ steps.guard.outputs.env-server-linux-x64 }}
+      env-server-linux-arm64: ${{ steps.guard.outputs.env-server-linux-arm64 }}
+
+    env:
+      CI_REQUEST: ${{ toJSON(inputs) }}
+      CI_ADMISSION_POLICY: ${{ vars.CI_ADMISSION_POLICY }}
+      CI_KIT_SHA: ${{ inputs.kit_sha }}
+      CI_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+      CI_EVENT_NAME: ${{ github.event_name }}
+      CI_REPOSITORY: ${{ github.repository }}
+      CI_REPOSITORY_ID: ${{ github.repository_id }}
+      CI_REF: ${{ github.ref }}
+      CI_REF_TYPE: ${{ github.ref_type }}
+      CI_ACTOR: ${{ github.actor }}
+      CI_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      CI_FORK: ${{ github.event.repository.fork }}
+      CI_RUN_ID: ${{ github.run_id }}
+      CI_ATTEMPT: ${{ github.run_attempt }}
+      CI_KIT_OPERATION: preflight
+    steps:
+      - name: Kit
+        uses: $/.github/actions/kit-bootstrap
+        with:
+          kit-sha: ${{ inputs.kit_sha }}
+      - name: Guard
+        id: guard
+        shell: bash
+        run: '"$RUNNER_TEMP/ci-kit"'
+  plan:
+    name: plan
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: ${{ needs.preflight.outputs.environment }}
+    outputs:
+      linux-debian: ${{ steps.plan.outputs.linux-debian }}
+      linux-arch: ${{ steps.plan.outputs.linux-arch }}
+      macos-arm64: ${{ steps.plan.outputs.macos-arm64 }}
+      macos-x64: ${{ steps.plan.outputs.macos-x64 }}
+      windows-x64: ${{ steps.plan.outputs.windows-x64 }}
+      windows-arm64: ${{ steps.plan.outputs.windows-arm64 }}
+      ios-simulator: ${{ steps.plan.outputs.ios-simulator }}
+      android-emulator: ${{ steps.plan.outputs.android-emulator }}
+      web-linux: ${{ steps.plan.outputs.web-linux }}
+      server-linux-x64: ${{ steps.plan.outputs.server-linux-x64 }}
+      server-linux-arm64: ${{ steps.plan.outputs.server-linux-arm64 }}
+    env:
+      CI_REQUEST: ${{ toJSON(inputs) }}
+      CI_ADMISSION_POLICY: ${{ vars.CI_ADMISSION_POLICY }}
+      CI_KIT_SHA: ${{ inputs.kit_sha }}
+      CI_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+      CI_EVENT_NAME: ${{ github.event_name }}
+      CI_REPOSITORY: ${{ github.repository }}
+      CI_REPOSITORY_ID: ${{ github.repository_id }}
+      CI_REF: ${{ github.ref }}
+      CI_REF_TYPE: ${{ github.ref_type }}
+      CI_ACTOR: ${{ github.actor }}
+      CI_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      CI_FORK: ${{ github.event.repository.fork }}
+      CI_RUN_ID: ${{ github.run_id }}
+      CI_ATTEMPT: ${{ github.run_attempt }}
+      CI_KIT_OPERATION: plan
+    steps:
+      - name: Kit
+        uses: $/.github/actions/kit-bootstrap
+        with:
+          kit-sha: ${{ inputs.kit_sha }}
+      - name: Plan
+        id: plan
+        shell: bash
+        env:
+          SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+          SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+          SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+          SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+          SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+          SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+          SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+          SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+          SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+          SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+          SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+          SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+          SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+          SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+          SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+          SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+          SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+          SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+          SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+          SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+          SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+          SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+          SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+          SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+          SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+          SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+          SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+          SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+          SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+          SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+          SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+          SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+          SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+        run: '"$RUNNER_TEMP/ci-kit"'
+  pack-linux-debian:
+    name: pack-linux-debian
+    needs: [preflight, plan]
+    if: needs.plan.outputs.linux-debian == 'true'
+    uses: ./.github/workflows/pack-linux-debian.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-linux-debian }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-linux-arch:
+    name: pack-linux-arch
+    needs: [preflight, plan]
+    if: needs.plan.outputs.linux-arch == 'true'
+    uses: ./.github/workflows/pack-linux-arch.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-linux-arch }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-macos-arm64:
+    name: pack-macos-arm64
+    needs: [preflight, plan]
+    if: needs.plan.outputs.macos-arm64 == 'true'
+    uses: ./.github/workflows/pack-macos-arm64.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-macos-arm64 }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-macos-x64:
+    name: pack-macos-x64
+    needs: [preflight, plan]
+    if: needs.plan.outputs.macos-x64 == 'true'
+    uses: ./.github/workflows/pack-macos-x64.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-macos-x64 }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-windows-x64:
+    name: pack-windows-x64
+    needs: [preflight, plan]
+    if: needs.plan.outputs.windows-x64 == 'true'
+    uses: ./.github/workflows/pack-windows-x64.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-windows-x64 }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-windows-arm64:
+    name: pack-windows-arm64
+    needs: [preflight, plan]
+    if: needs.plan.outputs.windows-arm64 == 'true'
+    uses: ./.github/workflows/pack-windows-arm64.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-windows-arm64 }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-ios-simulator:
+    name: pack-ios-simulator
+    needs: [preflight, plan]
+    if: needs.plan.outputs.ios-simulator == 'true'
+    uses: ./.github/workflows/pack-ios-simulator.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-ios-simulator }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-android-emulator:
+    name: pack-android-emulator
+    needs: [preflight, plan]
+    if: needs.plan.outputs.android-emulator == 'true'
+    uses: ./.github/workflows/pack-android-emulator.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-android-emulator }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-web-linux:
+    name: pack-web-linux
+    needs: [preflight, plan]
+    if: needs.plan.outputs.web-linux == 'true'
+    uses: ./.github/workflows/pack-web-linux.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-web-linux }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-server-linux-x64:
+    name: pack-server-linux-x64
+    needs: [preflight, plan]
+    if: needs.plan.outputs.server-linux-x64 == 'true'
+    uses: ./.github/workflows/pack-server-linux-x64.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-server-linux-x64 }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  pack-server-linux-arm64:
+    name: pack-server-linux-arm64
+    needs: [preflight, plan]
+    if: needs.plan.outputs.server-linux-arm64 == 'true'
+    uses: ./.github/workflows/pack-server-linux-arm64.yml # zizmor: ignore[self-repository] -- documented same-commit reusable reference
+    with:
+      concern: ${{ inputs.concern }}
+      source_sha: ${{ inputs.source_sha }}
+      base_sha: ${{ inputs.base_sha }}
+      mode: ${{ inputs.mode }}
+      purpose: ${{ inputs.purpose }}
+      platforms: ${{ inputs.platforms }}
+      selector: ${{ inputs.selector }}
+      request_id: ${{ inputs.request_id }}
+      kit_api: ${{ inputs.kit_api }}
+      request_digest: ${{ inputs.request_digest }}
+      kit_sha: ${{ inputs.kit_sha }}
+      environment: ${{ needs.preflight.outputs.env-server-linux-arm64 }}
+    secrets:
+      SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+      SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+      SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+      SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+      SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+      SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+      SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+      SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+      SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+      SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+      SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+      SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+      SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+      SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+      SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+      SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+      SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+      SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+      SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+      SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+      SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+      SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+      SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+      SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+      SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+      SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+      SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+      SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+      SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+      SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+      SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+      SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+      SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+  collect:
+    name: collect
+    if: always()
+    needs: [preflight, plan, pack-linux-debian, pack-linux-arch, pack-macos-arm64, pack-macos-x64, pack-windows-x64, pack-windows-arm64, pack-ios-simulator, pack-android-emulator, pack-web-linux, pack-server-linux-x64, pack-server-linux-arm64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+    env:
+      CI_REQUEST: ${{ toJSON(inputs) }}
+      CI_ADMISSION_POLICY: ${{ vars.CI_ADMISSION_POLICY }}
+      CI_KIT_SHA: ${{ inputs.kit_sha }}
+      CI_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+      CI_EVENT_NAME: ${{ github.event_name }}
+      CI_REPOSITORY: ${{ github.repository }}
+      CI_REPOSITORY_ID: ${{ github.repository_id }}
+      CI_REF: ${{ github.ref }}
+      CI_REF_TYPE: ${{ github.ref_type }}
+      CI_ACTOR: ${{ github.actor }}
+      CI_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      CI_FORK: ${{ github.event.repository.fork }}
+      CI_RUN_ID: ${{ github.run_id }}
+      CI_ATTEMPT: ${{ github.run_attempt }}
+      CI_KIT_OPERATION: collect
+      CI_NEEDS: ${{ toJSON(needs) }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Kit
+        uses: $/.github/actions/kit-bootstrap
+        with:
+          kit-sha: ${{ inputs.kit_sha }}
+      - name: Execute
+        shell: bash
+        run: '"$RUNNER_TEMP/ci-kit"'

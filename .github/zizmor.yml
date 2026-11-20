@@ -1,0 +1,2 @@
+# Keep all security audits enabled. Findings need specific, reviewed dispositions.
+rules: {}

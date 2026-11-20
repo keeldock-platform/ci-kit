@@ -1,0 +1,7 @@
+.ci-local/
+.nx/
+node_modules/
+dist/
+*.test
+__pycache__/
+*.pyc

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "go": "1.27.4",
+  "actions": {
+    "actions/checkout": {
+      "version": "v7.0.1",
+      "commit": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "license": "MIT"
+    },
+    "actions/setup-go": {
+      "version": "v7.1.0",
+      "commit": "d8cbb8045d7f43706b9177cceb36c1f91a6644d5",
+      "license": "MIT"
+    },
+    "actions/setup-node": {
+      "version": "v7.1.0",
+      "commit": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+      "license": "MIT"
+    },
+    "goreleaser/goreleaser-action": {
+      "version": "v7.3.0",
+      "commit": "a4f02ab5355a589de60d917a659ce617ed19b3de",
+      "license": "MIT"
+    },
+    "actions/upload-artifact": {
+      "version": "v7.0.2",
+      "commit": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+      "license": "MIT"
+    }
+  },
+  "maintenance": {
+    "github/gh-actions-lock": {
+      "version": "v0.5.1",
+      "commit": "d68b1a345a0aa02cf870cd0e0d78418d492d280d",
+      "license": "MIT"
+    },
+    "rhysd/actionlint": {
+      "version": "v1.7.12",
+      "commit": "914e7df21a07ef503a81201c76d2b11c789d3fca",
+      "license": "MIT"
+    },
+    "zizmorcore/zizmor": {
+      "version": "v1.32.0",
+      "commit": "21bd300700d43d9ba04b0c1fce72a89391ac80b4",
+      "license": "MIT"
+    },
+    "reactivecircus/android-emulator-runner": {
+      "version": "v2.38.0",
+      "commit": "a421e43855164a8197daf9d8d40fe71c6996bb0d",
+      "license": "Apache-2.0",
+      "execution": "pinned exported modules with verification before launch"
+    }
+  },
+  "node": "26.8.1",
+  "images": {
+    "debian:13": "sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6",
+    "archlinux:base": "sha256:d4594bb2300cba11f41c2f27923eb56f63d9988909c402f9c95517d1e362c899",
+    "mcr.microsoft.com/playwright:v1.65.1-noble": "sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579"
+  }
+}

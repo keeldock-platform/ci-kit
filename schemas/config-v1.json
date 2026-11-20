@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keeldock:kd-ci:config:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "concern",
+    "kit_api",
+    "unit_roots",
+    "shared_units",
+    "local_policy"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "concern": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,95}$"
+    },
+    "kit_api": {
+      "const": 1
+    },
+    "unit_roots": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "shared_units": {
+      "type": "string",
+      "minLength": 1
+    },
+    "composition_lock": {
+      "type": "string",
+      "minLength": 1
+    },
+    "local_policy": {
+      "enum": [
+        "managed-owner-mac",
+        "developer-machine"
+      ]
+    },
+    "results_dir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retention_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 30
+    }
+  }
+}

@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+: "${KD_CI_PUBLIC_DENYLIST:?private publication policy required}"
+: "${KD_CI_PUBLIC_TARGET:?reviewed publication target required}"
+[ "${2:-}" = "$KD_CI_PUBLIC_TARGET" ] || { printf '%s\n' 'FAIL publication_target'; exit 1; }
+root=$(git rev-parse --show-toplevel)
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_ref" = "$remote_ref" ] || { printf '%s\n' 'FAIL publication_ref'; exit 1; }
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/develop|refs/heads/uat|refs/heads/untrusted|refs/heads/ci/*|refs/heads/release/*) ;;
+    *) printf '%s\n' 'FAIL publication_ref'; exit 1 ;;
+  esac
+  [ "$local_sha" != 0000000000000000000000000000000000000000 ] || { printf '%s\n' 'FAIL publication_delete'; exit 1; }
+  python3 "$root/tests/policy/layout.py" --root "$root" --head "$local_sha"
+  if [ "$remote_sha" = 0000000000000000000000000000000000000000 ]; then
+    python3 "$root/tests/policy/public_content.py" --root "$root" --policy "$KD_CI_PUBLIC_DENYLIST" --head "$local_sha" --all-refs --ref "$remote_ref"
+  else
+    python3 "$root/tests/policy/public_content.py" --root "$root" --policy "$KD_CI_PUBLIC_DENYLIST" --base "$remote_sha" --head "$local_sha" --ref "$remote_ref"
+  fi
+done

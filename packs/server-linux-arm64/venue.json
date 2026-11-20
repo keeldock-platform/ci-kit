@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "platform": "server-linux-arm64",
+  "runner": "ubuntu-24.04-arm",
+  "timeout_minutes": 60,
+  "native_arch": "arm64",
+  "native_os": "linux"
+}

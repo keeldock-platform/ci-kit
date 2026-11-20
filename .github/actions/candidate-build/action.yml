@@ -1,0 +1,10 @@
+name: Build unsigned native snapshot
+description: Immutable public tool dependency
+runs:
+  using: composite
+  steps:
+    - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de
+      with:
+        distribution: goreleaser
+        version: v2.20.2
+        args: build --single-target --snapshot --clean

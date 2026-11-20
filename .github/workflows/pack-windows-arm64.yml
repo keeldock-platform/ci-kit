@@ -1,0 +1,175 @@
+name: Pack windows-arm64
+on:
+  workflow_call:
+    inputs:
+      concern:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+      base_sha:
+        required: true
+        type: string
+      mode:
+        required: true
+        type: string
+      purpose:
+        required: true
+        type: string
+      platforms:
+        required: true
+        type: string
+      selector:
+        required: true
+        type: string
+      request_id:
+        required: true
+        type: string
+      kit_api:
+        required: true
+        type: string
+      request_digest:
+        required: true
+        type: string
+      kit_sha:
+        type: string
+        required: true
+      environment:
+        type: string
+        required: true
+    secrets:
+      SOURCE_MAP:
+        required: true
+      SOURCE_READ_01:
+        required: true
+      SOURCE_READ_02:
+        required: false
+      SOURCE_READ_03:
+        required: false
+      SOURCE_READ_04:
+        required: false
+      SOURCE_READ_05:
+        required: false
+      SOURCE_READ_06:
+        required: false
+      SOURCE_READ_07:
+        required: false
+      SOURCE_READ_08:
+        required: false
+      SOURCE_READ_09:
+        required: false
+      SOURCE_READ_10:
+        required: false
+      SOURCE_READ_11:
+        required: false
+      SOURCE_READ_12:
+        required: false
+      SOURCE_READ_13:
+        required: false
+      SOURCE_READ_14:
+        required: false
+      SOURCE_READ_15:
+        required: false
+      SOURCE_READ_16:
+        required: false
+      SOURCE_READ_17:
+        required: false
+      SOURCE_READ_18:
+        required: false
+      SOURCE_READ_19:
+        required: false
+      SOURCE_READ_20:
+        required: false
+      SOURCE_READ_21:
+        required: false
+      SOURCE_READ_22:
+        required: false
+      SOURCE_READ_23:
+        required: false
+      SOURCE_READ_24:
+        required: false
+      SOURCE_READ_25:
+        required: false
+      SOURCE_READ_26:
+        required: false
+      SOURCE_READ_27:
+        required: false
+      SOURCE_READ_28:
+        required: false
+      SOURCE_READ_29:
+        required: false
+      SOURCE_READ_30:
+        required: false
+      SOURCE_READ_31:
+        required: false
+      SOURCE_READ_32:
+        required: false
+permissions: {}
+cache-mode: none
+jobs:
+  pack-windows-arm64:
+    name: pack-windows-arm64
+    runs-on: windows-11-arm
+    timeout-minutes: 75
+    environment: ${{ inputs.environment }}
+    env:
+      CI_REQUEST: ${{ toJSON(inputs) }}
+      CI_ADMISSION_POLICY: ${{ vars.CI_ADMISSION_POLICY }}
+      CI_KIT_SHA: ${{ inputs.kit_sha }}
+      CI_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+      CI_EVENT_NAME: ${{ github.event_name }}
+      CI_REPOSITORY: ${{ github.repository }}
+      CI_REPOSITORY_ID: ${{ github.repository_id }}
+      CI_REF: ${{ github.ref }}
+      CI_REF_TYPE: ${{ github.ref_type }}
+      CI_ACTOR: ${{ github.actor }}
+      CI_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      CI_FORK: ${{ github.event.repository.fork }}
+      CI_RUN_ID: ${{ github.run_id }}
+      CI_ATTEMPT: ${{ github.run_attempt }}
+      CI_KIT_OPERATION: pack
+      CI_PLATFORM: windows-arm64
+    steps:
+      - name: Kit
+        uses: $/.github/actions/kit-bootstrap
+        with:
+          kit-sha: ${{ inputs.kit_sha }}
+      - name: Execute
+        shell: bash
+        env:
+          SOURCE_MAP: ${{ secrets.SOURCE_MAP }}
+          SOURCE_READ_01: ${{ secrets.SOURCE_READ_01 }}
+          SOURCE_READ_02: ${{ secrets.SOURCE_READ_02 }}
+          SOURCE_READ_03: ${{ secrets.SOURCE_READ_03 }}
+          SOURCE_READ_04: ${{ secrets.SOURCE_READ_04 }}
+          SOURCE_READ_05: ${{ secrets.SOURCE_READ_05 }}
+          SOURCE_READ_06: ${{ secrets.SOURCE_READ_06 }}
+          SOURCE_READ_07: ${{ secrets.SOURCE_READ_07 }}
+          SOURCE_READ_08: ${{ secrets.SOURCE_READ_08 }}
+          SOURCE_READ_09: ${{ secrets.SOURCE_READ_09 }}
+          SOURCE_READ_10: ${{ secrets.SOURCE_READ_10 }}
+          SOURCE_READ_11: ${{ secrets.SOURCE_READ_11 }}
+          SOURCE_READ_12: ${{ secrets.SOURCE_READ_12 }}
+          SOURCE_READ_13: ${{ secrets.SOURCE_READ_13 }}
+          SOURCE_READ_14: ${{ secrets.SOURCE_READ_14 }}
+          SOURCE_READ_15: ${{ secrets.SOURCE_READ_15 }}
+          SOURCE_READ_16: ${{ secrets.SOURCE_READ_16 }}
+          SOURCE_READ_17: ${{ secrets.SOURCE_READ_17 }}
+          SOURCE_READ_18: ${{ secrets.SOURCE_READ_18 }}
+          SOURCE_READ_19: ${{ secrets.SOURCE_READ_19 }}
+          SOURCE_READ_20: ${{ secrets.SOURCE_READ_20 }}
+          SOURCE_READ_21: ${{ secrets.SOURCE_READ_21 }}
+          SOURCE_READ_22: ${{ secrets.SOURCE_READ_22 }}
+          SOURCE_READ_23: ${{ secrets.SOURCE_READ_23 }}
+          SOURCE_READ_24: ${{ secrets.SOURCE_READ_24 }}
+          SOURCE_READ_25: ${{ secrets.SOURCE_READ_25 }}
+          SOURCE_READ_26: ${{ secrets.SOURCE_READ_26 }}
+          SOURCE_READ_27: ${{ secrets.SOURCE_READ_27 }}
+          SOURCE_READ_28: ${{ secrets.SOURCE_READ_28 }}
+          SOURCE_READ_29: ${{ secrets.SOURCE_READ_29 }}
+          SOURCE_READ_30: ${{ secrets.SOURCE_READ_30 }}
+          SOURCE_READ_31: ${{ secrets.SOURCE_READ_31 }}
+          SOURCE_READ_32: ${{ secrets.SOURCE_READ_32 }}
+        run: '"$RUNNER_TEMP/ci-kit"'

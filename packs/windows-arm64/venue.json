@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "platform": "windows-arm64",
+  "runner": "windows-11-arm",
+  "timeout_minutes": 75,
+  "native_arch": "arm64",
+  "native_os": "windows"
+}

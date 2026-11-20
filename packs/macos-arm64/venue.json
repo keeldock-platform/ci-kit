@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "platform": "macos-arm64",
+  "runner": "macos-26",
+  "timeout_minutes": 60,
+  "native_arch": "arm64",
+  "native_os": "darwin"
+}

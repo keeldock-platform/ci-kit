@@ -1,0 +1,26 @@
+name: Public policy
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+permissions: {}
+cache-mode: none
+jobs:
+  policy:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-policy.yml # zizmor: ignore[self-repository] -- same workflow commit
+    with:
+      kit_sha: ${{ github.sha }}
+  ci-policy:
+    name: ci-policy
+    if: always()
+    needs: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Verdict
+        shell: bash
+        env:
+          POLICY_RESULT: ${{ needs.policy.result }}
+        run: test "$POLICY_RESULT" = success

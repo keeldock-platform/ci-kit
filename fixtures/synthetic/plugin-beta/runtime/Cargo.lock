@@ -1,0 +1,5 @@
+version = 4
+
+[[package]]
+name = "synthetic-plugin-beta"
+version = "0.1.0"

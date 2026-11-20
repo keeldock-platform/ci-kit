@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "cli_version": "0.1.0-dev",
+  "command": "results purge",
+  "scope": "local",
+  "state": "ready",
+  "ok": true,
+  "exit_code": 0,
+  "admission_eligible": false,
+  "identity": {
+    "concern": null,
+    "source_sha": null,
+    "base_sha": null,
+    "control_sha": null,
+    "kit_sha": null,
+    "composition_sha256": null,
+    "selector_sha256": null,
+    "request_id": null,
+    "ci_repo": null,
+    "workflow_id": null,
+    "run_id": null,
+    "attempt": null,
+    "url": null,
+    "purpose": null
+  },
+  "coverage": {
+    "expected_platforms": [],
+    "completed_platforms": []
+  },
+  "stages": [],
+  "error": null,
+  "operation": null,
+  "local": {
+    "dirty": false,
+    "units": [],
+    "explanation": [],
+    "child_exit": null,
+    "child_signal": null,
+    "log_dir": null,
+    "data": {
+      "deleted_result_ids": [
+        "11111111-1111-4111-8111-111111111111"
+      ],
+      "retained_unknown_count": 0
+    }
+  }
+}

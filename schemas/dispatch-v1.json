@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "$id": "urn:keeldock:kd-ci:dispatch:1",
+  "required": [
+    "ref",
+    "inputs"
+  ],
+  "properties": {
+    "ref": {
+      "const": "main"
+    },
+    "inputs": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "concern",
+        "source_sha",
+        "base_sha",
+        "mode",
+        "purpose",
+        "platforms",
+        "selector",
+        "request_id",
+        "kit_api",
+        "request_digest"
+      ],
+      "properties": {
+        "concern": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._-]{0,95}$"
+        },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "base_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "mode": {
+          "enum": [
+            "unit",
+            "quick",
+            "affected",
+            "full",
+            "candidate"
+          ]
+        },
+        "purpose": {
+          "enum": [
+            "feedback",
+            "admission"
+          ]
+        },
+        "platforms": {
+          "type": "string"
+        },
+        "selector": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+        },
+        "kit_api": {
+          "const": "1"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

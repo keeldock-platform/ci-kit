@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "platform": "windows-x64",
+  "runner": "windows-2025",
+  "timeout_minutes": 60,
+  "native_arch": "amd64",
+  "native_os": "windows"
+}

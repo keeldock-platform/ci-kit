@@ -1,0 +1,161 @@
+name: Kit bootstrap
+description: Build the reviewed public helper at one immutable kit revision
+inputs:
+  kit-sha:
+    description: Reviewed immutable kit revision
+    required: true
+  route:
+    description: Separate synthetic experiment entry
+    required: false
+    default: ''
+  policy-only:
+    description: Source-free policy bootstrap
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Authority
+      shell: bash
+      env:
+        CI_ROUTE: ${{ inputs.route }}
+        CI_BOOTSTRAP_PRIVATE: ${{ github.event.repository.private }}
+        CI_BOOTSTRAP_SHA: ${{ inputs.kit-sha }}
+        CI_BOOTSTRAP_POLICY_ONLY: ${{ inputs.policy-only }}
+        CI_EXPERIMENT_POLICY: ${{ vars.CI_EXPERIMENT_POLICY }}
+        CI_BOOTSTRAP_POLICY: ${{ inputs.route == 'experiment' && vars.CI_EXPERIMENT_POLICY || vars.CI_ADMISSION_POLICY }}
+        CI_BOOTSTRAP_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        CI_BOOTSTRAP_WORKFLOW_REF: ${{ github.workflow_ref }}
+        CI_BOOTSTRAP_REPOSITORY: ${{ github.repository }}
+        CI_BOOTSTRAP_REPOSITORY_ID: ${{ github.repository_id }}
+        CI_BOOTSTRAP_EVENT: ${{ github.event_name }}
+        CI_BOOTSTRAP_REF: ${{ github.ref }}
+        CI_BOOTSTRAP_REF_TYPE: ${{ github.ref_type }}
+        CI_BOOTSTRAP_ACTOR: ${{ github.actor }}
+        CI_BOOTSTRAP_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        CI_BOOTSTRAP_FORK: ${{ github.event.repository.fork }}
+      run: |
+        python3 -I - <<'PYTHON'
+        import json, os, re, sys
+        def unique(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value: raise ValueError()
+                value[key] = item
+            return value
+        try:
+            e = dict(os.environ)
+            sha = e['CI_BOOTSTRAP_SHA']
+            assert re.fullmatch('[a-f0-9]{40}', sha)
+            assert e['CI_BOOTSTRAP_EVENT'] in (['workflow_dispatch', 'pull_request', 'push', 'schedule'] if e['CI_BOOTSTRAP_POLICY_ONLY'] == 'true' else ['workflow_dispatch'])
+            assert e['CI_BOOTSTRAP_REF_TYPE'] == 'branch'
+            assert e['CI_BOOTSTRAP_FORK'] == 'false'
+            assert not e.get('RUNNER_DEBUG')
+            assert e.get('ACTIONS_RUNNER_DEBUG', '').lower() != 'true'
+            assert e.get('ACTIONS_STEP_DEBUG', '').lower() != 'true'
+            if e['CI_BOOTSTRAP_POLICY_ONLY'] == 'true':
+                assert e.get('CI_ROUTE', '') == ''
+                assert e['CI_BOOTSTRAP_REPOSITORY'] in ['keeldock-platform/ci-kit','keeldock-platform/platform-ci','keeldock-workspace/workspace-ci','keeldock-connect/connect-ci','keeldock-data/data-ci','Keeldock/keeldock-ci']
+                assert e['CI_BOOTSTRAP_PRIVATE'] == 'false'
+                assert int(e['CI_BOOTSTRAP_REPOSITORY_ID']) > 0
+                assert e['CI_BOOTSTRAP_REF'].startswith(('refs/heads/', 'refs/pull/'))
+                assert e['CI_BOOTSTRAP_WORKFLOW_REF'].split('@')[0] in [e['CI_BOOTSTRAP_REPOSITORY']+'/.github/workflows/'+p for p in ['ci-policy.yml','pr-lint.yml','scheduled.yml']]
+
+            else:
+                assert e['CI_BOOTSTRAP_POLICY_ONLY'] == 'false'
+                route = e.get('CI_ROUTE', '')
+                assert route in ['', 'experiment']
+                if route == 'experiment':
+                    assert e.get('CI_EXPERIMENT_POLICY') and e['CI_BOOTSTRAP_POLICY'] == e['CI_EXPERIMENT_POLICY']
+                    ref = e['CI_BOOTSTRAP_REF']
+                    assert re.fullmatch('refs/heads/experiment/ci-[a-z0-9][a-z0-9-]{0,63}', ref)
+                    assert e['CI_BOOTSTRAP_WORKFLOW_REF'] == e['CI_BOOTSTRAP_REPOSITORY']+'/.github/workflows/experiment-ci.yml@'+ref
+                    experiment = json.loads(e['CI_REQUEST'], object_pairs_hook=unique)
+                    ep = json.loads(e['CI_BOOTSTRAP_POLICY'], object_pairs_hook=unique)
+                    assert experiment['concern'] == 'canary' and experiment['purpose'] == 'feedback'
+                    assert set(ep['concerns']) == {'canary'} and ep['affected_qualified'] is False
+                    e['CI_BOOTSTRAP_REF'] = 'refs/heads/main'
+                    e['CI_BOOTSTRAP_WORKFLOW_REF'] = e['CI_BOOTSTRAP_REPOSITORY']+'/.github/workflows/canary-ci.yml@refs/heads/main'
+                assert e['CI_BOOTSTRAP_REF'] == 'refs/heads/main'
+                raw = e['CI_BOOTSTRAP_POLICY']
+                assert 0 < len(raw.encode()) <= 16384
+                policy = json.loads(raw, object_pairs_hook=unique)
+                assert set(policy) == {'schema_version', 'caller_repository', 'caller_repository_id', 'control_sha', 'kit_sha', 'actors', 'concerns', 'acquisition_reviewed', 'affected_qualified', 'incident'}
+                assert type(policy['schema_version']) is int and policy['schema_version'] == 1
+                assert type(policy['caller_repository_id']) is int and policy['caller_repository_id'] > 0
+                assert re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,99}/[A-Za-z0-9][A-Za-z0-9._-]{0,99}', policy['caller_repository'])
+                assert re.fullmatch('[a-f0-9]{40}', policy['control_sha'])
+                assert re.fullmatch('[a-f0-9]{40}', policy['kit_sha'])
+                assert type(policy['affected_qualified']) is bool
+                actors = policy['actors']
+                assert type(actors) is list and 0 < len(actors) <= 32
+                assert all(type(a) is str and re.fullmatch('[A-Za-z0-9][A-Za-z0-9-]{0,38}', a) for a in actors)
+                assert len(set(actors)) == len(actors)
+                concerns = policy['concerns']
+                assert type(concerns) is dict and 0 < len(concerns) <= 32
+                for alias, item in concerns.items():
+                    assert re.fullmatch('[a-z][a-z0-9._-]{0,95}', alias)
+                    assert type(item) is dict and set(item) in [{'environment', 'source_map_sha256'}, {'environment', 'source_map_sha256', 'environments'}]
+                    assert re.fullmatch('[a-z][a-z0-9-]{0,95}', item['environment'])
+                    assert re.fullmatch('[a-f0-9]{64}', item['source_map_sha256'])
+                    if alias == 'canary':
+                        assert 'environments' in item
+                    if 'environments' in item:
+                        slots = {'plan', 'linux-debian', 'linux-arch', 'macos-arm64', 'macos-x64', 'windows-x64', 'windows-arm64', 'ios-simulator', 'android-emulator', 'web-linux', 'server-linux-x64', 'server-linux-arm64'}
+                        environments = item['environments']
+                        assert type(environments) is dict and set(environments) == slots
+                        assert all(type(value) is str and re.fullmatch('[a-z][a-z0-9-]{0,95}', value) for value in environments.values())
+                        assert len(set(environments.values())) == len(slots)
+                request = e['CI_REQUEST']
+                assert 0 < len(request.encode()) <= 12288
+                request = json.loads(request, object_pairs_hook=unique)
+                assert request['concern'] in concerns
+                if e['CI_BOOTSTRAP_WORKFLOW_REF'] == policy['caller_repository'] + '/.github/workflows/canary-ci.yml@refs/heads/main':
+                    assert request['concern'] == 'canary'
+                assert policy['acquisition_reviewed'] is True
+                assert policy['incident'] is False
+                assert sha == policy['kit_sha']
+                assert e['CI_BOOTSTRAP_WORKFLOW_SHA'] == policy['control_sha']
+                assert e['CI_BOOTSTRAP_REPOSITORY'] == policy['caller_repository']
+                assert int(e['CI_BOOTSTRAP_REPOSITORY_ID']) == policy['caller_repository_id']
+                assert e['CI_BOOTSTRAP_ACTOR'] in policy['actors']
+                assert e['CI_BOOTSTRAP_TRIGGERING_ACTOR'] in policy['actors']
+                assert e['CI_BOOTSTRAP_WORKFLOW_REF'] in [policy['caller_repository'] + '/.github/workflows/' + p + '@refs/heads/main' for p in ['source-ci.yml', 'canary-ci.yml', 'dispatch.yml']]
+        except BaseException:
+            print('FAIL')
+            sys.exit(3)
+        print('PASS')
+        PYTHON
+    - name: Public control
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: keeldock-platform/ci-kit
+        ref: ${{ inputs.kit-sha }}
+        path: public-control
+        persist-credentials: false
+        fetch-depth: 0
+    - name: Go
+      uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
+      with:
+        go-version: '1.27.4'
+        cache: false
+        check-latest: false
+    - name: Node
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+      with:
+        node-version: '26.8.1'
+        package-manager-cache: false
+        check-latest: false
+    - name: Build helper
+      shell: bash
+      env:
+        CI_KIT_SHA: ${{ inputs.kit-sha }}
+        CGO_ENABLED: '0'
+        GOTOOLCHAIN: local
+      run: |
+        set -euo pipefail
+        test "$(git -C public-control rev-parse HEAD)" = "$CI_KIT_SHA"
+        cd public-control
+        npm ci --prefix planner --ignore-scripts --no-audit --no-fund
+        go mod verify
+        go build -trimpath -mod=readonly -o "$RUNNER_TEMP/ci-kit" ./cmd/ci-kit

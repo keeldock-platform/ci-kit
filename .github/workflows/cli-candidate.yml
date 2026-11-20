@@ -1,0 +1,100 @@
+name: CLI candidate
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+cache-mode: none
+
+concurrency:
+  group: cli-candidate-main
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.repository.private == false
+    name: candidate-${{ matrix.os }}-${{ matrix.arch }}
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: true
+      max-parallel: 6
+      matrix:
+        include:
+          - os: darwin
+            arch: amd64
+            runner: macos-15-intel
+          - os: darwin
+            arch: arm64
+            runner: macos-26
+          - os: linux
+            arch: amd64
+            runner: ubuntu-24.04
+          - os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - os: windows
+            arch: amd64
+            runner: windows-2025
+          - os: windows
+            arch: arm64
+            runner: windows-11-arm
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: '0'
+      GOFLAGS: -mod=readonly
+      GOTOOLCHAIN: local
+      GOOS: ${{ matrix.os }}
+      GOARCH: ${{ matrix.arch }}
+      CANDIDATE_OS: ${{ matrix.os }}
+      CANDIDATE_ARCH: ${{ matrix.arch }}
+      CONTROL_SHA: ${{ github.sha }}
+      PRODUCING_RUN_ID: ${{ github.run_id }}
+      PRODUCING_ATTEMPT: ${{ github.run_attempt }}
+      NX_DAEMON: 'false'
+      NX_CACHE_PROJECT_GRAPH: 'false'
+      NX_NO_CLOUD: 'true'
+    steps:
+      - name: Checkout public control
+        uses: $/.github/actions/candidate-checkout
+        with:
+          ref: ${{ github.sha }}
+      - name: Select native Go
+        uses: $/.github/actions/candidate-go
+        with:
+          architecture: ${{ matrix.arch }}
+      - name: Check native execution host
+        run: go run ./cmd/ci-candidate -host-only -os "$CANDIDATE_OS" -arch "$CANDIDATE_ARCH"
+      - name: Select analysis runtime
+        uses: $/.github/actions/candidate-node
+        with:
+          architecture: ${{ matrix.arch == 'amd64' && 'x64' || 'arm64' }}
+      - name: Provision locked analysis dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix planner
+      - name: Verify committed dependencies
+        run: |
+          go mod download
+          go mod verify
+          git diff --exit-code -- go.mod go.sum planner/package-lock.json
+      - name: Run native tooling checks
+        run: |
+          go test -count=1 -mod=readonly ./...
+          npm test --prefix planner
+          git diff --exit-code
+      - name: Build unsigned native snapshot
+        uses: $/.github/actions/candidate-build
+      - name: Smoke and bind exact executable bytes
+        run: >-
+          go run ./cmd/ci-candidate
+          -os "$CANDIDATE_OS" -arch "$CANDIDATE_ARCH"
+          -control-sha "$CONTROL_SHA"
+          -run-id "$PRODUCING_RUN_ID" -attempt "$PRODUCING_ATTEMPT"
+          -dist dist -out candidate-output
+      - name: Upload unsigned tooling candidate only
+        uses: $/.github/actions/candidate-upload
+        with:
+          name: tool-candidate-${{ matrix.os }}-${{ matrix.arch }}-${{ github.sha }}

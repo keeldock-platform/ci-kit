@@ -1,0 +1,14 @@
+name: Checkout public control
+description: Immutable public tool dependency
+inputs:
+  ref:
+    description: Public candidate input
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ inputs.ref }}
+        fetch-depth: 0
+        persist-credentials: false

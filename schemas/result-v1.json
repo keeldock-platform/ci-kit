@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keeldock:kd-ci:result:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","cli_version","command","scope","state","ok","exit_code","admission_eligible","identity","coverage","stages","error","operation","local"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "cli_version": {"type": "string"},
+    "command": {"enum": ["invalid","version","doctor","list","explain","run","dispatch","status","wait","failures","cancel","results purge"]},
+    "scope": {"enum": ["local","hosted"]},
+    "state": {"enum": ["ready","queued","running","passed","failed","blocked","unknown","cancelled","superseded","deadline"]},
+    "ok": {"type": "boolean"},
+    "exit_code": {"type": "integer", "minimum": 0, "maximum": 8},
+    "admission_eligible": {"type": "boolean"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "coverage": {"type": "object", "additionalProperties": false,
+      "required": ["expected_platforms","completed_platforms"],
+      "properties": {
+        "expected_platforms": {"type":"array","uniqueItems":true,"items":{"type":"string"}},
+        "completed_platforms": {"type":"array","uniqueItems":true,"items":{"type":"string"}}
+      }},
+    "stages": {"type":"array", "items":{"$ref":"#/$defs/stage"}},
+    "error": {"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,
+      "required":["code","message","retryable"],"properties":{
+        "code":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,63}$"},
+        "message":{"type":"string","maxLength":512},"retryable":{"type":"boolean"}
+      }}]},
+    "operation": {"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,
+      "required":["dispatch_accepted","cancel_requested","cancel_confirmed"],
+      "properties":{"dispatch_accepted":{"type":"boolean"},"cancel_requested":{"type":"boolean"},"cancel_confirmed":{"type":"boolean"}}}]},
+    "local": {"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,
+      "required":["dirty","units","explanation","child_exit","child_signal","log_dir","data"],
+      "properties":{
+        "dirty":{"type":"boolean"},"units":{"type":"array","items":{"type":"string"}},
+        "explanation":{"type":"array","items":{"type":"string"}},
+        "child_exit":{"type":["integer","null"]},"child_signal":{"type":["string","null"]},
+        "log_dir":{"type":["string","null"]},"data":{"type":"object"}
+      }}]}
+  },
+  "allOf": [
+    {"if":{"properties":{"scope":{"const":"hosted"}}},"then":{"properties":{"local":{"type":"null"}}}},
+    {"if":{"properties":{"admission_eligible":{"const":true}}},"then":{"properties":{"scope":{"const":"hosted"},"state":{"const":"passed"},"ok":{"const":true},"exit_code":{"const":0}}}}
+  ],
+  "$defs": {
+    "sha": {"type":["string","null"],"pattern":"^[a-f0-9]{40}$"},
+    "identity": {"type":"object","additionalProperties":false,
+      "required":["concern","source_sha","base_sha","control_sha","kit_sha","composition_sha256","selector_sha256","request_id","ci_repo","workflow_id","run_id","attempt","url","purpose"],
+      "properties":{
+        "concern":{"type":["string","null"]},"source_sha":{"$ref":"#/$defs/sha"},"base_sha":{"$ref":"#/$defs/sha"},
+        "control_sha":{"$ref":"#/$defs/sha"},"kit_sha":{"$ref":"#/$defs/sha"},
+        "composition_sha256":{"type":["string","null"],"pattern":"^[a-f0-9]{64}$"},
+        "selector_sha256":{"type":["string","null"],"pattern":"^[a-f0-9]{64}$"},
+        "request_id":{"type":["string","null"]},"ci_repo":{"type":["string","null"]},
+        "workflow_id":{"type":["string","null"]},"run_id":{"type":["string","null"]},
+        "attempt":{"type":["integer","null"],"minimum":1},"url":{"type":["string","null"]},
+        "purpose":{"enum":[null,"feedback","admission"]}
+      }},
+    "stage": {"type":"object","additionalProperties":false,
+      "required":["slot","platform","state","failure_class","started_at","completed_at"],
+      "properties":{
+        "slot":{"type":"string"},"platform":{"type":["string","null"]},
+        "state":{"enum":["queued","running","passed","failed","blocked","unknown","cancelled","skipped"]},
+        "failure_class":{"enum":[null,"product","setup","auth","capacity","harness","transport","cleanup"]},
+        "started_at":{"type":["string","null"],"format":"date-time"},"completed_at":{"type":["string","null"],"format":"date-time"}
+      }}
+  }
+}

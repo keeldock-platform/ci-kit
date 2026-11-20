@@ -1,0 +1,21 @@
+version: 2
+project_name: kd-ci
+builds:
+  - id: kd-ci
+    main: ./cmd/kd-ci
+    binary: kd-ci
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/keeldock-platform/ci-kit/internal/cli.Version={{ .Version }} -X github.com/keeldock-platform/ci-kit/internal/cli.Commit={{ .FullCommit }}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+archives:
+  - formats: [binary]
+    name_template: 'tool-candidate-{{ .Os }}-{{ .Arch }}-{{ .FullCommit }}'
+release:
+  disable: true
+changelog:
+  disable: true

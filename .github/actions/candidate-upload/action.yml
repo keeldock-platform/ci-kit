@@ -1,0 +1,23 @@
+name: Upload unsigned tooling candidate only
+description: Immutable public tool dependency
+inputs:
+  name:
+    description: Public candidate input
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: ${{ inputs.name }}
+        path: |
+          candidate-output/kd-ci
+          candidate-output/kd-ci.exe
+          candidate-output/THIRD_PARTY_NOTICES
+          candidate-output/SHA256SUMS
+          candidate-output/candidate.json
+        retention-days: 1
+        if-no-files-found: error
+        include-hidden-files: false
+        overwrite: false
+        compression-level: 0
