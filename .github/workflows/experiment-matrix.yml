@@ -96,6 +96,10 @@ jobs:
         if: startsWith(matrix.platform, 'windows-')
         shell: pwsh
         run: ./public-control/fixtures/synthetic/windows-tools.ps1
+      - name: Windows public Rust preparation
+        if: startsWith(matrix.platform, 'windows-')
+        shell: bash
+        run: node public-control/fixtures/synthetic/windows-rust.mjs
       - name: Public browser reproduction
         if: matrix.platform == 'web-linux'
         shell: bash
@@ -104,6 +108,10 @@ jobs:
         shell: bash
         run: |
           cd public-control
+          node --test fixtures/synthetic/rust/cargo-check.test.mjs
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            CI_PUBLIC_WINDOWS_RUST_SMOKE=1 go test -count=1 -v -mod=readonly ./internal/process -run '^TestHostedWindowsRustSmoke$'
+          fi
           go test -count=1 -v -mod=readonly ./internal/collector
           CI_REGISTERED_SIGNATURE_SMOKE=1 go test -count=1 -v -mod=readonly ./internal/github -run '^TestHostedRegisteredSignature$'
           go test -mod=readonly -v ./internal/github -run '^TestHostedSignatureAssessment$' > "$RUNNER_TEMP/signature-assessment.log" 2>&1
