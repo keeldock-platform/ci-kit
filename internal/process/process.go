@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -70,12 +71,21 @@ func SafePath(root, rel string) (string, error) {
 // Environment admits only explicit, ordinary tool/build variables. Inherited
 // credentials, workflow channels, preload/debug hooks and agent sockets disappear.
 func Environment(extra map[string]string) ([]string, error) {
+	return environmentFor(extra, runtime.GOOS == "windows")
+}
+func environmentFor(extra map[string]string, windows bool) ([]string, error) {
+	key := func(k string) string {
+		if windows {
+			return strings.ToUpper(k)
+		}
+		return k
+	}
 	allowed := map[string]bool{"PATH": true, "HOME": true, "USERPROFILE": true, "SYSTEMROOT": true, "WINDIR": true, "TMP": true, "TEMP": true, "TMPDIR": true, "LANG": true, "LC_ALL": true, "TZ": true, "CARGO_HOME": true, "RUSTUP_HOME": true, "CARGO_TARGET_DIR": true, "GOCACHE": true, "GOMODCACHE": true, "GOPATH": true, "JAVA_HOME": true, "ANDROID_HOME": true, "ANDROID_SDK_ROOT": true, "DEVELOPER_DIR": true, "SDKROOT": true, "CI": true, "NO_COLOR": true, "TERM": true}
 	env := map[string]string{"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.DevNull, "GIT_TERMINAL_PROMPT": "0"}
 	for _, pair := range os.Environ() {
 		k, v, _ := strings.Cut(pair, "=")
 		if allowed[strings.ToUpper(k)] {
-			env[k] = v
+			env[key(k)] = v
 		}
 	}
 	fixed := map[string]string{"CARGO_NET_OFFLINE": "true", "RUSTUP_AUTO_INSTALL": "0", "npm_config_offline": "true", "npm_config_update_notifier": "false", "NPM_CONFIG_AUDIT": "false", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1", "NX_DAEMON": "false", "NX_CACHE_PROJECT_GRAPH": "false", "NX_NO_CLOUD": "true", "NX_SKIP_NX_CACHE": "true", "NX_INTERACTIVE": "false", "NX_NATIVE_COMMAND_RUNNER": "false", "NX_LOAD_DOT_ENV_FILES": "false", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.DevNull, "GIT_TERMINAL_PROMPT": "0"}
@@ -84,20 +94,20 @@ func Environment(extra map[string]string) ([]string, error) {
 			if !validDevice(k, v) {
 				return nil, ErrInvalid
 			}
-			env[k] = v
+			env[key(k)] = v
 			continue
 		}
 		if want, ok := fixed[k]; ok {
 			if v != want {
 				return nil, ErrInvalid
 			}
-			env[k] = v
+			env[key(k)] = v
 			continue
 		}
 		if !allowed[strings.ToUpper(k)] || strings.ContainsAny(k+v, "\x00\r\n") {
 			return nil, ErrInvalid
 		}
-		env[k] = v
+		env[key(k)] = v
 	}
 	keys := make([]string, 0, len(env))
 	for k := range env {
