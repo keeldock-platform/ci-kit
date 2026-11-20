@@ -117,6 +117,13 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 		if err != nil || result.ExitCode != 0 || !result.CleanupComplete {
 			return 6
 		}
+		if experiment && len(cmd.Argv) >= 2 && cmd.Argv[0] == "node" && cmd.Argv[1] == "ci/canary.mjs" {
+			if syntheticCapture(source, result) != nil {
+				fmt.Println("STAGE capture FAIL")
+				return 6
+			}
+			fmt.Println("STAGE capture PASS")
+		}
 		return 0
 	}
 	// The shared committed pack policy owns setup once. The same captured process
