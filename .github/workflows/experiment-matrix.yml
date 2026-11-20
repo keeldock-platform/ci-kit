@@ -111,6 +111,12 @@ jobs:
         run: |
           cd public-control
           if go test -mod=readonly ./cmd/ci-kit -run 'TestSharedSyntheticEnvironmentStaysExperimentOnly|TestExperimentRouteIsSeparateAndSyntheticOnly' > "$RUNNER_TEMP/boundary-test.log" 2>&1; then
+            if go test -mod=readonly ./internal/github -run 'TestSignatureToolsIgnoreAmbientPathOrder|TestPublishedKitIncludesCurrentRevocationAuthority' > "$RUNNER_TEMP/signature-tool-test.log" 2>&1; then
+              echo 'STAGE signature-tools PASS'
+            else
+              echo 'STAGE signature-tools FAIL'
+              exit 3
+            fi
             echo 'STAGE boundary PASS'
           else
             echo 'STAGE boundary FAIL'
