@@ -4,6 +4,7 @@ package wiring
 import (
 	"encoding/json"
 	"errors"
+	"github.com/keeldock-platform/ci-kit/internal/config"
 	"regexp"
 	"strings"
 
@@ -126,7 +127,7 @@ func Check(caller, kit []byte, sha, tip string, admittedBase ...string) error {
 		return bad
 	}
 	var inputs map[string]string
-	if json.Unmarshal([]byte(call.With["request"]), &inputs) != nil || inputs["source_sha"] != tip || inputs["base_sha"] != base {
+	if config.Decode([]byte(call.With["request"]), &inputs, 16384) != nil || inputs["source_sha"] != tip || inputs["base_sha"] != base {
 		return bad
 	}
 	d := protocol.Dispatch{Ref: "experiment/ci-wiring", Inputs: inputs}

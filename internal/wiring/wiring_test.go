@@ -67,6 +67,15 @@ func TestSyntheticWiringRefusals(t *testing.T) {
 	if Check(next, k, sha, tip, base, base) == nil {
 		t.Fatal("ambiguous base accepted")
 	}
+
+	for _, key := range []string{"base_sha", "source_sha"} {
+		duplicate := strings.Replace(string(nextRequest), "{", `{`+`"`+key+`":"`+base+`",`, 1)
+		duplicateQuoted, _ := json.Marshal(duplicate)
+		malformed := []byte(strings.Replace(string(c), string(quoted), string(duplicateQuoted), 1))
+		if Check(malformed, k, sha, tip, base) == nil {
+			t.Fatal("duplicate request binding accepted")
+		}
+	}
 	if Check(c, k, sha, strings.Repeat("3", 40)) == nil {
 		t.Fatal("stale tip accepted")
 	}
