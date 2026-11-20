@@ -75,3 +75,42 @@ func TestMissingSecondVariantCannotReuseFirstReport(t *testing.T) {
 		t.Fatalf("missing fresh report: got exit %d", got)
 	}
 }
+
+func TestRunnerCompletenessAcrossRequiredInvocations(t *testing.T) {
+	for _, tc := range []struct {
+		name, xml  string
+		exit, want int
+	}{
+		{"nonempty", `<testsuite><testcase name="renamed"/></testsuite>`, 0, 0},
+		{"zero", `<testsuite tests="99"/>`, 0, 6},
+		{"skipped-suite", `<testsuite><testcase name="skipped"><skipped/></testcase></testsuite>`, 0, 6},
+		{"failed-report", `<testsuite><testcase name="failed"><failure/></testcase></testsuite>`, 0, 6},
+		{"original-failing-exit", `<testsuite><testcase name="passed"/></testsuite>`, 23, 23},
+		{"unsupported-summary", `{"tests":2,"passed":2}`, 0, 6},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, e := filepath.EvalSymlinks(t.TempDir())
+			if e != nil {
+				t.Fatal(e)
+			}
+			check := catalog.Check{Reports: []string{"report.xml"}}
+			unit := catalog.Unit{ID: "sample", TimeoutSeconds: 10, Checks: map[string]catalog.Check{"unit": check}}
+			inv := planner.Invocation{ID: "sample-unit@macos-arm64", Unit: "sample", Check: "unit", Platform: "macos-arm64", Commands: []catalog.Command{{Cwd: ".", Argv: []string{"fixture"}}}}
+			run := func(context.Context, catalog.Command, string) int {
+				if os.WriteFile(filepath.Join(root, "report.xml"), []byte(tc.xml), 0600) != nil {
+					t.Fatal("report")
+				}
+				return tc.exit
+			}
+			before := func(context.Context, string) error { return nil }
+			if code := runChecks(context.Background(), root, t.TempDir(), "macos-arm64", []catalog.Unit{unit}, map[string]string{"sample": root}, []planner.Invocation{inv}, true, run, before); code != tc.want {
+				t.Fatalf("got %d want %d", code, tc.want)
+			}
+		})
+	}
+}
+func TestEmptyPackNeverCompletes(t *testing.T) {
+	if code := runChecks(context.Background(), t.TempDir(), t.TempDir(), "macos-arm64", nil, nil, nil, true, nil, nil); code != 6 {
+		t.Fatal("empty pack passed")
+	}
+}

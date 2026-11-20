@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -86,7 +87,7 @@ func AggregateAliases(units []Unit, shared Shared) ([]Alias, error) {
 			}
 		}
 		sort.Strings(values)
-		expanded[name] = dedupeSelectors(values)
+		expanded[name] = slices.CompactFunc(values, strings.EqualFold)
 	}
 	result := make([]Alias, 0, len(names))
 	for _, name := range names {
@@ -133,14 +134,5 @@ func ExpandAliases(units []Unit, shared Shared, selectors []string) ([]string, e
 		}
 	}
 	sort.Strings(out)
-	return dedupeSelectors(out), nil
-}
-func dedupeSelectors(values []string) []string {
-	out := values[:0]
-	for _, value := range values {
-		if len(out) == 0 || !strings.EqualFold(out[len(out)-1], value) {
-			out = append(out, value)
-		}
-	}
-	return out
+	return slices.CompactFunc(out, strings.EqualFold), nil
 }

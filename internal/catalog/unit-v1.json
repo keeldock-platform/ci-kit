@@ -243,7 +243,6 @@
     "depends_on",
     "optional_contracts",
     "cache",
-    "assertions",
     "outputs",
     "pack",
     "cost_class",
@@ -661,7 +660,6 @@
         }
       },
       "required": [
-        "census",
         "paths",
         "test_paths",
         "inputs",
@@ -670,7 +668,6 @@
         "needs",
         "depends_on",
         "variants",
-        "assertions",
         "reports"
       ],
       "additionalProperties": false

@@ -11,3 +11,8 @@ Adds generic unit selection, platform packs, captured execution, CLI protocols a
 - Create fixture report parents during captured setup and select the Rust fixture.
 - Validate required simulator variants before creating owned devices.
 - Isolate synthetic experiment authority and preserve diagnostic stage exit codes.
+
+- Prepare the main-only seven-platform production cohort; park Windows/mobile
+  without source authority and retain all acquisition, signer and capture guards.
+- Apply runner-level bulk completeness and one-shot observation while preserving
+  mandatory privacy invariants and the full selection/local CLI surface.

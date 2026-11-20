@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -315,7 +316,7 @@ func projectMetadata(ctx context.Context, root string, units []catalog.Unit) (nx
 		}
 		sort.Strings(inputs)
 		sort.Strings(checks)
-		projection.Features = append(projection.Features, nxFeature{Name: u.ID, Root: r, Inputs: unique(inputs), Checks: checks})
+		projection.Features = append(projection.Features, nxFeature{Name: u.ID, Root: r, Inputs: slices.Compact(inputs), Checks: checks})
 	}
 	owner := func(rel string) string {
 		for r, id := range roots {
@@ -492,7 +493,7 @@ func projectMetadata(ctx context.Context, root string, units []catalog.Unit) (nx
 				} else {
 					pkg = strings.Split(pkg, "/")[0]
 				}
-				if !contains(deps[from], pkg) {
+				if !slices.Contains(deps[from], pkg) {
 					return projection, "undeclared package import"
 				}
 				if target := packages[pkg]; target != "" && target != from {

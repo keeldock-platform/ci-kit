@@ -9,14 +9,21 @@ caller binds source/base/control/request identity before this pure comparison.
 REST consumers may project native dependency results only when the exact trusted
 finalizer is present and its reviewed implementation checks actual `needs`.
 
-`ValidateReports` reconciles private unit/check/platform/variant/shard tuples,
-report paths, test IDs and assertion IDs. JUnit semantics come from the maintained
-`github.com/joshdk/go-junit` dependency, with a bounded standard XML safety scan;
-no external entities/directives are accepted. Every report must be nonempty,
-well formed, bounded, all-passed and exactly match the expected census. Assertions
-must name actual parsed passed tests. Shards must form a complete disjoint union;
-only explicit feedback mode permits a selected shard subset. Quick feedback must
-supply its exact selected test census and remains non-admitting.
+`ValidateReports` reconciles required private unit/check/platform/variant/shard
+identities and report paths. Maintained runners own bulk test discovery and
+pass/fail. Every supported JUnit report must be fresh, bounded and nonempty,
+with actual passed cases and no failure/error. An all-skipped suite refuses;
+ordinary product skips/retries and renamed tests no longer require exact census
+equality. Unsupported reports refuse. Required shards remain complete; explicit
+feedback can select one shard. Named selection maps remain for quick tests and
+measured shards, independently of admission completeness.
+
+`assertions` declares only mandatory security/privacy invariants, including
+positive private canaries. Each must pass exactly once, never skip. Unit-level
+invariant ownership remains checked. These lists are optional for ordinary product
+suites. Runner exit failures take precedence over report validation. The XML
+resource/entity/encoding guards remain, and private reports never become public
+results. `Failures` extracts names and errors only for private-file diagnostics.
 
 Errors contain fixed classes only. Test names, report contents and private tuples
 are never suitable hosted output. `PublicLine` emits only an allowed fixed slot

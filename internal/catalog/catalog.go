@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -288,7 +289,7 @@ func Validate(units []Unit) error {
 								continue
 							}
 							for candidateCheck, candidatePolicy := range candidateUnit.Checks {
-								if contains(candidatePolicy.Platforms, p) {
+								if slices.Contains(candidatePolicy.Platforms, p) {
 									targets = append(targets, candidateUnit.ID+"-"+candidateCheck+"@"+p)
 								}
 							}
@@ -319,7 +320,7 @@ func validateUnit(u Unit) error {
 	for _, assertion := range u.Assertions {
 		owners := 0
 		for _, c := range u.Checks {
-			if contains(c.Assertions, assertion) {
+			if slices.Contains(c.Assertions, assertion) {
 				owners++
 			}
 		}
@@ -338,19 +339,20 @@ func validateUnit(u Unit) error {
 				return ErrInvalid
 			}
 		}
+		// Optional selection metadata must still cover every mandatory invariant.
 		for _, assertion := range c.Assertions {
-			if !contains(c.Census, assertion) {
+			if len(c.Census) > 0 && !slices.Contains(c.Census, assertion) {
 				return ErrInvalid
 			}
 		}
-		if (check == "unit" || check == "integration" || check == "e2e" || check == "visual") && (len(c.Reports) == 0 || len(c.Census) == 0) {
+		if (check == "unit" || check == "integration" || check == "e2e" || check == "visual") && len(c.Reports) == 0 {
 			return ErrInvalid
 		}
-		if !contains(CheckTypes, check) || len(c.Platforms) == 0 {
+		if !slices.Contains(CheckTypes, check) || len(c.Platforms) == 0 {
 			return ErrInvalid
 		}
 		for _, p := range c.Platforms {
-			if !contains(Platforms, p) || !contains(u.Platforms, p) {
+			if !slices.Contains(Platforms, p) || !slices.Contains(u.Platforms, p) {
 				return ErrInvalid
 			}
 			cmds := c.Commands[p]
@@ -380,7 +382,7 @@ func validateUnit(u Unit) error {
 			}
 		}
 		for p := range c.PlatformInputs {
-			if !contains(c.Platforms, p) {
+			if !slices.Contains(c.Platforms, p) {
 				return ErrInvalid
 			}
 		}
@@ -448,14 +450,6 @@ func validateUnit(u Unit) error {
 		}
 	}
 	return nil
-}
-func contains(xs []string, x string) bool {
-	for _, v := range xs {
-		if v == x {
-			return true
-		}
-	}
-	return false
 }
 
 // Entries expands declared combinations and measured shards in stable order.

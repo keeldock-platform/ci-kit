@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"github.com/keeldock-platform/ci-kit/internal/collector"
 	"github.com/keeldock-platform/ci-kit/internal/protocol"
@@ -87,47 +86,14 @@ func (c *Client) DispatchRun(ctx context.Context, r Registration, d protocol.Dis
 			return x, run, e
 		}
 	} else {
-		var recErr error
-		run, recErr = c.reconcile(ctx, r, d)
-		if recErr != nil {
-			return x, run, Fail(6, "dispatch_ambiguous")
-		}
-		x.RunID = runID(run.ID)
+		// A lost write response is unknown. Never search, retry or attach another run.
+		return x, run, Fail(6, "dispatch_ambiguous")
 	}
 	x.Attempt = run.RunAttempt
 	if x.Attempt != 1 || bind(x, run) != nil {
 		return x, run, Fail(6, "missing_evidence")
 	}
 	return x, run, nil
-}
-func (c *Client) reconcile(ctx context.Context, r Registration, d protocol.Dispatch) (Run, error) {
-	var found []Run
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	for page := 1; page <= 10; page++ {
-		var rs struct {
-			Runs []Run `json:"workflow_runs"`
-		}
-		_, e := c.Request(ctx, "GET", "repos/"+r.Caller.Repository+"/actions/workflows/"+r.Caller.WorkflowID+"/runs?event=workflow_dispatch&per_page=100&page="+itoa(page), nil, &rs)
-		if e != nil {
-			return Run{}, e
-		}
-		for _, run := range rs.Runs {
-			if run.DisplayTitle == d.RunName() {
-				found = append(found, run)
-			}
-		}
-		if len(rs.Runs) < 100 {
-			break
-		}
-		if page == 10 {
-			return Run{}, Fail(6, "dispatch_ambiguous")
-		}
-	}
-	if len(found) != 1 {
-		return Run{}, Fail(6, "dispatch_ambiguous")
-	}
-	return found[0], nil
 }
 
 type apiJob struct {
@@ -296,63 +262,53 @@ func optional(v string) *string {
 	}
 	return &v
 }
+
+// Wait retains the CLI/API spelling as a one-shot status observation.
 func (c *Client) Wait(ctx context.Context, x Expectation, command, version string) (protocol.Result, error) {
-	for {
-		r, e := c.Status(ctx, x, command, version)
-		if e != nil || r.ExitCode != 8 {
-			return r, e
-		}
-		if e = c.Sleep(ctx, 120*time.Second); e != nil {
-			return r, Fail(4, "deadline")
-		}
-	}
+	return c.Status(ctx, x, command, version)
 }
 func (c *Client) Cancel(ctx context.Context, x Expectation, version string, observers ...func(CancellationRecord) error) (r protocol.Result, err error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	r = protocol.New("cancel", version, true)
+	r.Operation = &protocol.Operation{}
 	if len(observers) > 1 || len(observers) == 1 && observers[0] == nil {
 		return r, Fail(6, "missing_evidence")
 	}
 	record := CancellationRecord{SchemaVersion: 1, RunID: x.RunID, OriginalAttempt: x.Attempt, ObservedState: "unknown"}
-	persist := func() error {
-		if len(observers) == 0 {
-			return nil
-		}
-		if observers[0](record) != nil {
-			return Fail(6, "missing_evidence")
-		}
-		return nil
-	}
-	observe := func(run Run) {
-		record.ObservedAttempt = run.RunAttempt
-		record.ObservedState = "unknown"
-		if run.Status == "queued" || run.Status == "in_progress" {
-			record.ObservedState = run.Status
-		} else if run.Status == "completed" {
-			record.ObservedState = terminalState(run.Conclusion)
-		}
-	}
 	defer func() {
 		if err != nil {
 			record.ErrorCode = "missing_evidence"
-			var failure *Failure
-			if errors.As(err, &failure) {
-				switch failure.Code {
-				case "cancel_attempt_drift", "policy_refused", "deadline", "interrupted":
-					record.ErrorCode = failure.Code
-				}
-			}
 		}
-		if persist() != nil {
+		if record.ObservedAttempt != 0 && record.ObservedAttempt != x.Attempt {
+			record.ErrorCode = "cancel_attempt_drift"
+		}
+		if len(observers) == 1 && observers[0](record) != nil {
+			r.State = "unknown"
+			r.Operation.CancelConfirmed = false
 			err = Fail(6, "missing_evidence")
 		}
 	}()
-	r.Operation = &protocol.Operation{}
-	run, e := c.ReadRun(ctx, x.Registration, x.RunID)
-	if e != nil {
-		return r, e
+	read := func() (Run, error) {
+		run, e := c.ReadRun(ctx, x.Registration, x.RunID)
+		if e != nil {
+			return run, e
+		}
+		record.ObservedAttempt = run.RunAttempt
+		if run.Status == "completed" {
+			record.ObservedState = terminalState(run.Conclusion)
+		} else if run.Status == "queued" || run.Status == "in_progress" {
+			record.ObservedState = run.Status
+		}
+		if run.RunAttempt != x.Attempt {
+			return run, Fail(6, "cancel_attempt_drift")
+		}
+		return run, bind(x, run)
 	}
-	observe(run)
-	if e = bind(x, run); e != nil {
+	// The provider write is run-scoped; a fresh before/after tuple still cannot
+	// make compare-and-cancel atomic. Drift or lost acknowledgement stays unknown.
+	run, e := read()
+	if e != nil {
 		return r, e
 	}
 	r.Identity = identity(x, run)
@@ -360,55 +316,25 @@ func (c *Client) Cancel(ctx context.Context, x Expectation, version string, obse
 		r.State = terminalState(run.Conclusion)
 		return r, nil
 	}
-	// Immediately recheck the provider attempt before the run-scoped write.
-	run, e = c.ReadRun(ctx, x.Registration, x.RunID)
-	if e != nil {
-		return r, e
-	}
-	observe(run)
-	if e = bind(x, run); e != nil {
-		return r, e
-	}
-	if run.Status == "completed" {
-		r.State = terminalState(run.Conclusion)
-		return r, nil
-	}
 	record.RequestedAttempt = x.Attempt
-	if e = persist(); e != nil {
-		return r, e
-	}
-	status, e := c.Request(ctx, "POST", "repos/"+x.Registration.Caller.Repository+"/actions/runs/"+x.RunID+"/cancel", nil, nil)
 	record.PostAttempted = true
+	status, e := c.Request(ctx, "POST", "repos/"+x.Registration.Caller.Repository+"/actions/runs/"+x.RunID+"/cancel", nil, nil)
 	if e != nil || status != 202 {
 		return r, Fail(6, "missing_evidence")
 	}
 	r.Operation.CancelRequested = true
 	record.CancelRequested = true
-	if e = persist(); e != nil {
+	run, e = read()
+	if e != nil {
 		return r, e
 	}
-	for {
-		current, e := c.ReadRun(ctx, x.Registration, x.RunID)
-		if e != nil {
-			return r, e
-		}
-		observe(current)
-		if current.RunAttempt != x.Attempt {
-			return r, Fail(6, "cancel_attempt_drift")
-		}
-		if current.Status == "completed" {
-			if bind(x, current) != nil {
-				return r, Fail(3, "policy_refused")
-			}
-			r.State = terminalState(current.Conclusion)
-			r.Operation.CancelConfirmed = current.Conclusion == "cancelled"
-			record.CancelConfirmed = r.Operation.CancelConfirmed
-			return r, nil
-		}
-		if e = c.Sleep(ctx, 120*time.Second); e != nil {
-			return r, Fail(4, "deadline")
-		}
+	if run.Status != "completed" {
+		return r, Fail(6, "missing_evidence")
 	}
+	r.State = terminalState(run.Conclusion)
+	r.Operation.CancelConfirmed = run.Conclusion == "cancelled"
+	record.CancelConfirmed = r.Operation.CancelConfirmed
+	return r, nil
 }
 func terminalState(conclusion string) string {
 	switch conclusion {

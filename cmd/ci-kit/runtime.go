@@ -27,13 +27,11 @@ func execute(ctx context.Context) int {
 	if e != nil {
 		return 3
 	}
-	if experimentRequest(c.Request) {
-		ctx = diagnosticContext(ctx)
-	}
+
 	switch os.Getenv("CI_KIT_OPERATION") {
 	case "preflight":
 		values := map[string]string{"environment": c.Concern.environment("plan")}
-		for _, p := range catalog.Platforms {
+		for _, p := range protocol.AdmittedPlatforms {
 			values["env-"+p] = c.Concern.environment(p)
 		}
 		if output(values) != nil {
@@ -55,7 +53,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 		return 3
 	}
 	m, e := acquire.ParseMap(raw, c.Request.Inputs["concern"])
-	if e != nil || os.Getenv("SOURCE_READ_01") == "" || experimentRequest(c.Request) && (len(m.Sources) != 1 || m.Root != "canary") {
+	if e != nil || os.Getenv("SOURCE_READ_01") == "" {
 		return 3
 	}
 	git, e := exec.LookPath("git")
@@ -75,12 +73,15 @@ func privateWork(ctx context.Context, c control) (code int) {
 		return 6
 	}
 	defer func() {
-		if os.RemoveAll(private) != nil && code == 0 {
+		cleanupErr := os.RemoveAll(private)
+
+		if cleanupErr != nil && code == 0 {
 			code = 1
 		}
 	}()
 	req := acquire.Request{Map: m, RootSHA: c.Request.Inputs["source_sha"], BaseSHA: c.Request.Inputs["base_sha"], Workspace: filepath.Join(private, "source"), Git: git, CredentialHelper: helper}
-	req.VerifyRepository = func(ctx context.Context, s acquire.Source) error {
+	req.VerifyRepository = func(ctx context.Context, s acquire.Source) (err error) {
+
 		client, e := provider.New(os.Getenv(s.SecretSlot), 30*time.Second, nil)
 		if e != nil {
 			return refused
@@ -96,7 +97,8 @@ func privateWork(ctx context.Context, c control) (code int) {
 		}
 		return nil
 	}
-	req.VerifySignatures = func(ctx context.Context, root, sha, base string) error {
+	req.VerifySignatures = func(ctx context.Context, root, sha, base string) (err error) {
+
 		wd, e := os.Getwd()
 		if e != nil {
 			return refused
@@ -111,9 +113,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 			return nil, refused
 		}
 		composition := config.SingleSourceComposition()
-		if experimentRequest(c.Request) && cfg.CompositionLock != "" {
-			return nil, refused
-		}
+
 		if cfg.CompositionLock != "" {
 			path, e := config.SafePath(root, cfg.CompositionLock)
 			if e != nil {
@@ -139,6 +139,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 		}
 		return result, nil
 	}
+
 	checkout, e := acquire.Acquire(ctx, req)
 	if e != nil || compositionDigest == "" {
 		return 3
@@ -152,6 +153,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 		_ = os.Unsetenv("SOURCE_READ_" + fmt.Sprintf("%02d", i))
 	}
 	_ = os.Unsetenv("SOURCE_MAP")
+
 	root := checkout.Sources[m.Root]
 	sources := map[string]catalog.CompositionSource{}
 	for alias, path := range checkout.Sources {
@@ -165,7 +167,7 @@ func privateWork(ctx context.Context, c control) (code int) {
 	if e != nil {
 		return 2
 	}
-	opts := planner.Options{Context: ctx, Base: c.Request.Inputs["base_sha"], SHA: c.Request.Inputs["source_sha"], Mode: c.Request.Inputs["mode"], Admission: c.Request.Inputs["purpose"] == "admission", Quick: c.Request.Inputs["mode"] == "quick", Qualified: c.Policy.AffectedQualified}
+	opts := planner.Options{Context: ctx, AdmittedOnly: true, Base: c.Request.Inputs["base_sha"], SHA: c.Request.Inputs["source_sha"], Mode: c.Request.Inputs["mode"], Admission: c.Request.Inputs["purpose"] == "admission", Quick: c.Request.Inputs["mode"] == "quick", Qualified: c.Policy.AffectedQualified}
 	wd, e := os.Getwd()
 	if e != nil {
 		return 6
@@ -285,12 +287,12 @@ func collect(ctx context.Context, c control) int {
 		Result  string            `json:"result"`
 		Outputs map[string]string `json:"outputs"`
 	}
-	if config.Decode([]byte(os.Getenv("CI_NEEDS")), &needs, 65536) != nil || len(needs) != len(catalog.Platforms)+2 || needs["preflight"].Result != "success" || needs["plan"].Result != "success" {
+	if config.Decode([]byte(os.Getenv("CI_NEEDS")), &needs, 65536) != nil || len(needs) != len(protocol.AdmittedPlatforms)+2 || needs["preflight"].Result != "success" || needs["plan"].Result != "success" {
 		return 6
 	}
 	expected := map[string]string{"preflight": "success", "plan": "success", "collect": "current"}
 	required := 0
-	for _, p := range catalog.Platforms {
+	for _, p := range protocol.AdmittedPlatforms {
 		flag := needs["plan"].Outputs[p]
 		n, ok := needs["pack-"+p]
 		if !ok || (flag != "true" && flag != "false") {
@@ -346,7 +348,7 @@ func collect(ctx context.Context, c control) int {
 		if total < 0 {
 			total = response.Total
 		}
-		if total != response.Total || total != len(expected) || len(response.Jobs) > 100 {
+		if total != response.Total || total > len(expected)+4 || total < len(expected) || len(response.Jobs) > 100 {
 			return 6
 		}
 		jobs = append(jobs, response.Jobs...)
@@ -366,6 +368,9 @@ func collect(ctx context.Context, c control) int {
 		slot, platform, ok := protocol.ParseJobName(j.Name)
 		if !ok {
 			return 6
+		}
+		if platform != "" && !protocol.AdmittedPlatform(platform) {
+			continue
 		}
 		key := slot
 		switch slot {

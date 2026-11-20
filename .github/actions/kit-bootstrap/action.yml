@@ -4,10 +4,6 @@ inputs:
   kit-sha:
     description: Reviewed immutable kit revision
     required: true
-  route:
-    description: Separate synthetic experiment entry
-    required: false
-    default: ''
   policy-only:
     description: Source-free policy bootstrap
     required: false
@@ -18,12 +14,9 @@ runs:
     - name: Authority
       shell: bash
       env:
-        CI_ROUTE: ${{ inputs.route }}
         CI_BOOTSTRAP_PRIVATE: ${{ github.event.repository.private }}
         CI_BOOTSTRAP_SHA: ${{ inputs.kit-sha }}
         CI_BOOTSTRAP_POLICY_ONLY: ${{ inputs.policy-only }}
-        CI_EXPERIMENT_POLICY: ${{ vars.CI_EXPERIMENT_POLICY }}
-        CI_BOOTSTRAP_POLICY: ${{ inputs.route == 'experiment' && vars.CI_EXPERIMENT_POLICY || vars.CI_ADMISSION_POLICY }}
         CI_BOOTSTRAP_WORKFLOW_SHA: ${{ github.workflow_sha }}
         CI_BOOTSTRAP_WORKFLOW_REF: ${{ github.workflow_ref }}
         CI_BOOTSTRAP_REPOSITORY: ${{ github.repository }}
@@ -45,6 +38,7 @@ runs:
             return value
         try:
             e = dict(os.environ)
+            e.setdefault('CI_BOOTSTRAP_POLICY', e.get('CI_ADMISSION_POLICY', ''))
             sha = e['CI_BOOTSTRAP_SHA']
             assert re.fullmatch('[a-f0-9]{40}', sha)
             assert e['CI_BOOTSTRAP_EVENT'] in (['workflow_dispatch', 'pull_request', 'push', 'schedule'] if e['CI_BOOTSTRAP_POLICY_ONLY'] == 'true' else ['workflow_dispatch'])
@@ -63,19 +57,7 @@ runs:
 
             else:
                 assert e['CI_BOOTSTRAP_POLICY_ONLY'] == 'false'
-                route = e.get('CI_ROUTE', '')
-                assert route in ['', 'experiment']
-                if route == 'experiment':
-                    assert e.get('CI_EXPERIMENT_POLICY') and e['CI_BOOTSTRAP_POLICY'] == e['CI_EXPERIMENT_POLICY']
-                    ref = e['CI_BOOTSTRAP_REF']
-                    assert re.fullmatch('refs/heads/experiment/ci-[a-z0-9][a-z0-9-]{0,63}', ref)
-                    assert e['CI_BOOTSTRAP_WORKFLOW_REF'] == e['CI_BOOTSTRAP_REPOSITORY']+'/.github/workflows/experiment-ci.yml@'+ref
-                    experiment = json.loads(e['CI_REQUEST'], object_pairs_hook=unique)
-                    ep = json.loads(e['CI_BOOTSTRAP_POLICY'], object_pairs_hook=unique)
-                    assert experiment['concern'] == 'canary' and experiment['purpose'] == 'feedback'
-                    assert set(ep['concerns']) == {'canary'} and ep['affected_qualified'] is False
-                    e['CI_BOOTSTRAP_REF'] = 'refs/heads/main'
-                    e['CI_BOOTSTRAP_WORKFLOW_REF'] = e['CI_BOOTSTRAP_REPOSITORY']+'/.github/workflows/canary-ci.yml@refs/heads/main'
+                assert e.get('CI_ROUTE', '') == ''
                 assert e['CI_BOOTSTRAP_REF'] == 'refs/heads/main'
                 raw = e['CI_BOOTSTRAP_POLICY']
                 assert 0 < len(raw.encode()) <= 16384
@@ -101,7 +83,7 @@ runs:
                     if alias == 'canary':
                         assert 'environments' in item
                     if 'environments' in item:
-                        slots = {'plan', 'linux-debian', 'linux-arch', 'macos-arm64', 'macos-x64', 'windows-x64', 'windows-arm64', 'ios-simulator', 'android-emulator', 'web-linux', 'server-linux-x64', 'server-linux-arm64'}
+                        slots = {'plan', 'linux-debian', 'linux-arch', 'macos-arm64', 'macos-x64', 'web-linux', 'server-linux-x64', 'server-linux-arm64'}
                         environments = item['environments']
                         assert type(environments) is dict and set(environments) == slots
                         assert all(type(value) is str and re.fullmatch('[a-z][a-z0-9-]{0,95}', value) for value in environments.values())

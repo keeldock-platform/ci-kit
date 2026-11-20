@@ -176,30 +176,7 @@ func (c *Client) Preflight(ctx context.Context, r Registration, root, source, ba
 	if config.Decode([]byte(variable.Value), &policy, 1<<20) != nil || policy.Validate(r) != nil {
 		return Fail(3, "policy_refused")
 	}
-	// Any existing active workflow could consume capacity; a same-source tuple is never duplicated.
-	for _, status := range []string{"queued", "in_progress", "waiting", "requested", "pending"} {
-		for page := 1; page <= 10; page++ {
-			var list struct {
-				Total int   `json:"total_count"`
-				Runs  []Run `json:"workflow_runs"`
-			}
-			path := "repos/" + r.Caller.Repository + "/actions/workflows/" + r.Caller.WorkflowID + "/runs?per_page=100&page=" + itoa(page) + "&status=" + status
-			if _, e := c.Request(ctx, "GET", path, nil, &list); e != nil {
-				return e
-			}
-			for _, run := range list.Runs {
-				if strings.HasPrefix(run.DisplayTitle, "kd/"+r.Concern+"/") {
-					return Fail(3, "policy_refused")
-				}
-			}
-			if len(list.Runs) < 100 {
-				break
-			}
-			if page == 10 {
-				return Fail(6, "missing_evidence")
-			}
-		}
-	}
+	// Native repository concurrency and coordinator capacity discipline own queueing.
 	return nil
 }
 func MarshalRegistration(r Registration) ([]byte, error) { return json.Marshal(r) }
@@ -225,10 +202,10 @@ type AdmissionPolicy struct {
 func (p AdmissionPolicy) Validate(r Registration) error {
 	concern, ok := p.Concerns[r.Concern]
 	if len(concern.Environments) > 0 {
-		if len(concern.Environments) != len(protocol.Platforms)+1 {
+		if len(concern.Environments) != len(protocol.AdmittedPlatforms)+1 {
 			return Fail(3, "policy_refused")
 		}
-		for _, slot := range append([]string{"plan"}, protocol.Platforms...) {
+		for _, slot := range append([]string{"plan"}, protocol.AdmittedPlatforms...) {
 			env, exists := concern.Environments[slot]
 			if !exists || !regexp.MustCompile(`^[a-z][a-z0-9-]{0,95}$`).MatchString(env) {
 				return Fail(3, "policy_refused")

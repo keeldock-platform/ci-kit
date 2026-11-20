@@ -34,6 +34,7 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 	if !ok {
 		return 2
 	}
+
 	index := 0
 	host := capturedExecutor(root, private, &index)
 	adapter := packs.Host()
@@ -101,16 +102,23 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 		}
 		result, err := process.Run(runCtx, process.Spec{Argv: argv, Root: source, Cwd: cwd, Env: env, ResultDir: filepath.Join(private, "capture-"+strconv.Itoa(index)), Timeout: timeout})
 		if result.TimedOut {
+
 			return 4
 		}
 		if state := contextExit(runCtx); state != 0 {
 			return state
 		}
 		if result.ExitCode > 0 {
+
 			return 1
 		}
 		if err != nil || result.ExitCode != 0 || !result.CleanupComplete {
 			return 6
+		}
+		if isSyntheticCanary(cmd) {
+			if syntheticCapture(source, result) != nil {
+				return 6
+			}
 		}
 		return 0
 	}
@@ -151,6 +159,9 @@ func runPack(ctx context.Context, root, private, platform string, units []catalo
 	return runChecks(ctx, root, private, platform, units, origins, selected, admission, run, adapter.Before)
 }
 func runChecks(ctx context.Context, root, private, platform string, units []catalog.Unit, origins map[string]string, selected []planner.Invocation, admission bool, run func(context.Context, catalog.Command, string) int, before func(context.Context, string) error) int {
+	if len(selected) == 0 {
+		return 6
+	}
 	var e error
 	byID := map[string]catalog.Unit{}
 	for _, u := range units {
@@ -160,45 +171,39 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 	census := collector.Census{Feedback: !admission}
 	allReports := []collector.Report{}
 	reportBytes := 0
-	firstFailure := 0
-	failedUnits := map[string]bool{}
-	failedEntries := map[string]bool{}
-	_, diagnosticMode := ctx.Value(diagnosticKey{}).(func(diagnosticStage))
-	diagnosticMode = diagnosticMode && !admission
-	for slot, inv := range selected {
+
+	for _, inv := range selected {
 		u, ok := byID[inv.Unit]
 		if !ok {
 			return 6
 		}
-		blocked := false
-		if diagnosticMode {
-			check := u.Checks[inv.Check]
-			for _, dependency := range append(append(append([]string{}, u.DependsOn...), u.OptionalContracts...), check.DependsOn...) {
-				blocked = blocked || failedUnits[dependency]
-			}
-			for _, need := range append(append([]string{}, u.Needs...), check.Needs...) {
-				blocked = blocked || failedEntries[need]
-			}
-			if blocked {
-				failedUnits[u.ID] = true
-				failedEntries[inv.ID] = true
-				diagnostic(ctx, diagnosticStage{Slot: slot, Code: 6, Blocked: true})
-				continue
-			}
-		}
+
 		if u.TimeoutSeconds < 1 || u.TimeoutSeconds > 21600 {
 			return 2
 		}
-		unitCtx, cancel := context.WithTimeout(ctx, time.Duration(u.TimeoutSeconds)*time.Second)
 		code := func() int {
-			if state := contextExit(unitCtx); state != 0 {
+			if state := contextExit(ctx); state != 0 {
 				return state
 			}
-			if before(unitCtx, inv.Variant) != nil {
-				if state := contextExit(unitCtx); state != 0 {
-					return state
-				}
+			// Native readiness has its own finite budget; source deadlines begin
+			// only after readiness, while both remain children of the job.
+			readyCtx, readyCancel := context.WithTimeout(ctx, 7*time.Minute)
+			readyErr := before(readyCtx, inv.Variant)
+			readyState := contextExit(readyCtx)
+			readyCancel()
+			if readyState != 0 {
+
+				return readyState
+			}
+			if readyErr != nil {
+
 				return 3
+			}
+
+			unitCtx, cancel := context.WithTimeout(ctx, time.Duration(u.TimeoutSeconds)*time.Second)
+			defer cancel()
+			if state := contextExit(unitCtx); state != 0 {
+				return state
 			}
 			source := origins[inv.Unit]
 			if source == "" {
@@ -209,9 +214,6 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 				return 6
 			}
 			hasReports := len(check.Reports) > 0
-			if hasReports && len(inv.Tests) == 0 {
-				return 6
-			}
 			if !hasReports && (!slices.Contains([]string{"format", "lint", "types"}, inv.Check) || len(check.Assertions) > 0 || len(inv.Tests) > 0) {
 				return 6
 			}
@@ -261,7 +263,7 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 					return 6
 				}
 			}
-			expectation := collector.ReportExpectation{Unit: inv.Unit, Check: inv.Check, Platform: platform, Variant: inv.Variant, Shard: shard, Shards: count, Assertions: invocationAssertions(check.Assertions, inv.Tests), Tests: inv.Tests, Reports: check.Reports}
+			expectation := collector.ReportExpectation{Unit: inv.Unit, Check: inv.Check, Platform: platform, Variant: inv.Variant, Shard: shard, Shards: count, Assertions: invocationAssertions(check.Assertions, inv.Tests), Reports: check.Reports}
 			reports := []collector.Report{}
 			for _, rel := range check.Reports {
 				path, e := reportPath(source, rel)
@@ -276,17 +278,7 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 				if reportBytes > 64<<20 {
 					return 6
 				}
-				tests, e := collector.PassedTests(data)
-				if e != nil {
-					return 6
-				}
-				assertions := []string{}
-				for _, a := range check.Assertions {
-					if slices.Contains(tests, a) {
-						assertions = append(assertions, a)
-					}
-				}
-				reports = append(reports, collector.Report{Unit: inv.Unit, Check: inv.Check, Platform: platform, Variant: inv.Variant, Shard: shard, Shards: count, Path: rel, Format: "junit", Data: data, Assertions: assertions})
+				reports = append(reports, collector.Report{Unit: inv.Unit, Check: inv.Check, Platform: platform, Variant: inv.Variant, Shard: shard, Shards: count, Path: rel, Format: "junit", Data: data})
 				owned[path] = true
 			}
 			// Each fresh invocation is complete in itself, including an independently
@@ -301,29 +293,12 @@ func runChecks(ctx context.Context, root, private, platform string, units []cata
 			allReports = append(allReports, reports...)
 			return 0
 		}()
-		cancel()
-		if diagnosticMode {
-			diagnostic(ctx, diagnosticStage{Slot: slot, Code: code})
-		}
+
 		if code != 0 {
-			if !diagnosticMode || code == 2 || code == 3 || code == 6 || code == 7 || ctx.Err() != nil {
-				if diagnosticMode {
-					for remaining := slot + 1; remaining < len(selected); remaining++ {
-						diagnostic(ctx, diagnosticStage{Slot: remaining, Code: 6, Blocked: true})
-					}
-				}
-				return code
-			}
-			if firstFailure == 0 {
-				firstFailure = code
-			}
-			failedUnits[u.ID] = true
-			failedEntries[inv.ID] = true
+			return code
 		}
 	}
-	if firstFailure != 0 {
-		return firstFailure
-	}
+
 	if len(census.Entries) > 0 && collector.ValidateReports(census, allReports) != nil {
 		return 6
 	}
@@ -346,6 +321,9 @@ func reportPath(root, rel string) (string, error) {
 }
 
 func invocationAssertions(assertions, tests []string) []string {
+	if len(tests) == 0 {
+		return assertions
+	}
 	selected := []string{}
 	for _, a := range assertions {
 		if slices.Contains(tests, a) {

@@ -49,10 +49,12 @@ type RelatedPolicy struct {
 	Census []string            `json:"census"`
 }
 
-// Check owns a single check family, its inputs and execution matrix.
+// Check owns one check family and matrix. Census is optional selection metadata
+// for related tests/measured shards. Assertions name mandatory privacy/security
+// invariants that must pass exactly once; they are not a bulk product census.
 type Check struct {
 	RequiresNetwork bool                 `json:"requires_network,omitempty"`
-	Census          []string             `json:"census"`
+	Census          []string             `json:"census,omitempty"`
 	Paths           []string             `json:"paths"`
 	TestPaths       []string             `json:"test_paths"`
 	Inputs          []string             `json:"inputs"`
@@ -64,7 +66,7 @@ type Check struct {
 	Variants        []Variant            `json:"variants"`
 	Shards          *ShardPolicy         `json:"shards,omitempty"`
 	Related         *RelatedPolicy       `json:"related,omitempty"`
-	Assertions      []string             `json:"assertions"`
+	Assertions      []string             `json:"assertions,omitempty"`
 	Reports         []string             `json:"reports"`
 }
 
@@ -85,7 +87,7 @@ type Unit struct {
 	DependsOn         []string             `json:"depends_on"`
 	OptionalContracts []string             `json:"optional_contracts"`
 	Cache             Cache                `json:"cache"`
-	Assertions        []string             `json:"assertions"`
+	Assertions        []string             `json:"assertions,omitempty"`
 	Outputs           Outputs              `json:"outputs"`
 	Pack              string               `json:"pack"`
 	CostClass         string               `json:"cost_class"`

@@ -43,6 +43,13 @@ func (a *app) writeHuman() {
 	} else if r.Local != nil {
 		if r.OK {
 			switch r.Command {
+			case "failures":
+				var data struct {
+					Count int `json:"failure_count"`
+				}
+				b, _ := json.Marshal(r.Local.Data)
+				json.Unmarshal(b, &data)
+				fmt.Fprintf(a.out, "%d failures written privately\n", data.Count)
 			case "version":
 				fmt.Fprintln(a.out, Version)
 			case "list":

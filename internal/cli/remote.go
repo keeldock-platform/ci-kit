@@ -57,6 +57,7 @@ func (a *app) dispatch() *cobra.Command {
 		if e != nil {
 			return e
 		}
+		opts.AdmittedOnly = true
 		opts.Admission = admission
 		opts.Qualified = reg.Qualified
 		if admission && !reg.Qualified {
@@ -205,14 +206,25 @@ func (a *app) dispatch() *cobra.Command {
 	return c
 }
 func (a *app) remote(name string) *cobra.Command {
-	var concern string
+	var concern, privateReport, privateOutput string
 	var attempt int
 	var deadline time.Duration
 	def := 2 * time.Hour
 	if name == "cancel" {
 		def = 5 * time.Minute
 	}
-	c := &cobra.Command{Use: name + " RUN_ID", Short: "Observe a registered run tuple", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, args []string) error {
+	c := &cobra.Command{Use: name + " RUN_ID", Short: "Observe a registered run tuple", Args: func(c *cobra.Command, args []string) error {
+		if name == "failures" && (privateReport != "" || privateOutput != "") {
+			return cobra.NoArgs(c, args)
+		}
+		return cobra.ExactArgs(1)(c, args)
+	}, RunE: func(c *cobra.Command, args []string) error {
+		if name == "failures" && (privateReport != "" || privateOutput != "") {
+			if concern != "" || attempt != 0 {
+				return gh.Fail(2, "usage")
+			}
+			return a.privateFailures(privateReport, privateOutput)
+		}
 		a.begin(name, true)
 		if name == "cancel" {
 			a.result.Operation = &protocol.Operation{}
@@ -262,13 +274,6 @@ func (a *app) remote(name string) *cobra.Command {
 		if attempt > 0 && attempt != x.Attempt {
 			return gh.Fail(3, "policy_refused")
 		}
-		if name == "wait" {
-			release, e := acquireWatcher(dir, x.RunID)
-			if e != nil {
-				return e
-			}
-			defer release()
-		}
 		client, e := a.client(root)
 		if e != nil {
 			return e
@@ -302,6 +307,10 @@ func (a *app) remote(name string) *cobra.Command {
 		return e
 	}}
 	c.Flags().StringVar(&concern, "concern", "", "Approved concern alias")
+	if name == "failures" {
+		c.Flags().StringVar(&privateReport, "private-report", "", "Read a local user-only JUnit report")
+		c.Flags().StringVar(&privateOutput, "private-output", "", "Create a user-only file listing failed names and errors")
+	}
 	c.Flags().IntVar(&attempt, "attempt", 0, "Pin an explicit run attempt")
 	if name == "wait" || name == "cancel" {
 		c.Flags().DurationVar(&deadline, "deadline", def, "Maximum observation duration")

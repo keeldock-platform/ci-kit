@@ -109,11 +109,11 @@ func VerifySignaturesWithAuthority(ctx context.Context, root, source, base strin
 	if e != nil || strings.TrimSpace(string(head)) != authority.KitSHA {
 		return Fail(3, "policy_refused")
 	}
-	ledger, e := Git(ctx, kit, 64<<10, "show", authority.KitSHA+":ci/revoked-signer-fingerprints")
+	ledger, e := Git(ctx, kit, 64<<10, "show", authority.KitSHA+":docs/revoked-signer-fingerprints")
 	if e != nil {
 		return e
 	}
-	path, e := config.SafePath(kit, "ci/revoked-signer-fingerprints")
+	path, e := config.SafePath(kit, "docs/revoked-signer-fingerprints")
 	if e != nil {
 		return Fail(3, "policy_refused")
 	}

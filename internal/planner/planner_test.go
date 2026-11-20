@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -285,7 +286,7 @@ func TestSourceRustConfigurationPreventsMetadataExecution(t *testing.T) {
 			t.Fatalf("source configuration reached metadata: %s", reason)
 		}
 	}
-	if !contains(cleanEnv(), "RUSTUP_AUTO_INSTALL=0") {
+	if !slices.Contains(cleanEnv(), "RUSTUP_AUTO_INSTALL=0") {
 		t.Fatal("metadata can implicitly install a toolchain")
 	}
 }

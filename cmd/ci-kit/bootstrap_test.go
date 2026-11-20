@@ -117,8 +117,6 @@ func TestBootstrapCanaryEnvironmentIsolation(t *testing.T) {
 		want                 int
 	}{
 		{"canary-map", canaryConcern, "canary-ci.yml", distinctSlotEnvironments(), true, 0},
-		{"experiment-map", canaryConcern, "canary-ci.yml", distinctSlotEnvironments(), true, 0},
-		{"experiment-missing-policy", canaryConcern, "canary-ci.yml", distinctSlotEnvironments(), true, 3},
 		{"canary-fallback", canaryConcern, "canary-ci.yml", nil, false, 3},
 		{"wrong-concern", "sample", "canary-ci.yml", distinctSlotEnvironments(), true, 3},
 		{"production-fallback", "sample", "source-ci.yml", nil, false, 0},
@@ -134,21 +132,13 @@ func TestBootstrapCanaryEnvironmentIsolation(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			fixture := environmentPolicyFixture(t, test.concern, test.entry, test.slots, test.explicit)
-			if strings.HasPrefix(test.name, "experiment-") {
-				fixture = experimentEnvironment(t)
-			}
+
 			values := map[string]string{"CI_BOOTSTRAP_POLICY_ONLY": "false", "CI_BOOTSTRAP_SHA": fixture["CI_KIT_SHA"], "CI_BOOTSTRAP_POLICY": fixture["CI_ADMISSION_POLICY"], "CI_REQUEST": fixture["CI_REQUEST"]}
 			for _, field := range []string{"WORKFLOW_SHA", "WORKFLOW_REF", "REPOSITORY", "REPOSITORY_ID", "REF", "REF_TYPE", "ACTOR", "TRIGGERING_ACTOR", "FORK"} {
 				values["CI_BOOTSTRAP_"+field] = fixture["CI_"+field]
 			}
 			values["CI_BOOTSTRAP_EVENT"] = fixture["CI_EVENT_NAME"]
-			if strings.HasPrefix(test.name, "experiment-") {
-				values["CI_ROUTE"] = "experiment"
-				values["CI_BOOTSTRAP_POLICY"] = fixture["CI_EXPERIMENT_POLICY"]
-				if test.name != "experiment-missing-policy" {
-					values["CI_EXPERIMENT_POLICY"] = fixture["CI_EXPERIMENT_POLICY"]
-				}
-			}
+
 			env, e := process.Environment(nil)
 			if e != nil {
 				t.Fatal(e)

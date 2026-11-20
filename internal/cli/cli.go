@@ -72,7 +72,7 @@ func Execute(ctx context.Context, args []string, out, errout io.Writer) int {
 }
 func takesFlagValue(name string) bool {
 	switch name {
-	case "config", "color", "http-timeout", "base", "sha", "unit", "platform", "mode", "deadline", "variant", "shard", "check", "concern", "request-id", "attempt", "older-than":
+	case "config", "color", "http-timeout", "base", "sha", "unit", "platform", "mode", "deadline", "variant", "shard", "check", "concern", "request-id", "attempt", "older-than", "private-report", "private-output":
 		return true
 	}
 	return false
@@ -270,16 +270,9 @@ func (a *app) version() *cobra.Command {
 	}}
 }
 func unique(ss []string) []string {
-	m := map[string]bool{}
-	for _, s := range ss {
-		m[s] = true
-	}
-	out := make([]string, 0, len(m))
-	for s := range m {
-		out = append(out, s)
-	}
-	sort.Strings(out)
-	return out
+	out := append([]string{}, ss...)
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 func validPlatforms(ps []string) bool {
 	for _, p := range ps {

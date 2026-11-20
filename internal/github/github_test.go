@@ -1,12 +1,14 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"github.com/keeldock-platform/ci-kit/internal/collector"
+	"github.com/keeldock-platform/ci-kit/internal/config"
 	"github.com/keeldock-platform/ci-kit/internal/process"
 	"github.com/keeldock-platform/ci-kit/internal/protocol"
 	"io"
@@ -106,18 +108,20 @@ func TestAmbiguousDispatchNeverRetriesPOST(t *testing.T) {
 		}
 	}
 }
-func TestDispatchAmbiguityResolvesUniqueUUID(t *testing.T) {
+func TestLostDispatchIsUnknownWithoutRecoverySearch(t *testing.T) {
 	x := fixture()
 	run := fixtureRun(x)
 	c, _ := New("synthetic", time.Second, transportFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method == "POST" {
 			return reply(204, nil), nil
 		}
+		t.Fatal("recovery search issued after ambiguous dispatch")
 		return reply(200, map[string]any{"workflow_runs": []Run{run}}), nil
 	}))
 	got, _, e := c.DispatchRun(context.Background(), x.Registration, x.Dispatch, x.CompositionSHA256)
-	if e != nil || got.RunID != "4" {
-		t.Fatal(e)
+	var f *Failure
+	if !errors.As(e, &f) || f.Code != "dispatch_ambiguous" || got.RunID != "" {
+		t.Fatal("lost dispatch recovered or admitted")
 	}
 }
 func TestImmutableRunBindingRejectsEveryMismatch(t *testing.T) {
@@ -207,11 +211,11 @@ func TestCancellationAttemptDriftPreservesRequest(t *testing.T) {
 		t.Fatal("cancel race lost")
 	}
 	files, e := os.ReadDir(dir)
-	if e != nil || len(files) != 3 {
-		t.Fatal("missing private cancellation events", e)
+	if e != nil || len(files) != 1 {
+		t.Fatal("missing compact private cancellation outcome", e)
 	}
 	var operationID string
-	for i, file := range files {
+	for _, file := range files {
 		p := filepath.Join(dir, file.Name())
 		if !process.UserOnly(p, false) {
 			t.Fatal("cancellation record is not user-only")
@@ -226,16 +230,9 @@ func TestCancellationAttemptDriftPreservesRequest(t *testing.T) {
 		if e != nil || json.Unmarshal(b, &event) != nil || event.OriginalAttempt != 1 || event.RequestedAttempt != 1 || event.RequestID != x.Dispatch.Inputs["request_id"] || event.RequestDigest != x.Dispatch.Inputs["request_digest"] || !protocol.UUID(event.OperationID) {
 			t.Fatal("private cancellation tuple lost")
 		}
-		if i == 0 {
-			operationID = event.OperationID
-			if event.PostAttempted || event.CancelRequested || event.ObservedAttempt != 1 {
-				t.Fatal("write intent confused with acknowledgement")
-			}
-		} else if event.OperationID != operationID || !event.PostAttempted || !event.CancelRequested {
-			t.Fatal("cancellation acknowledgement lost")
-		}
-		if i == 2 && (event.ObservedAttempt != 2 || event.ErrorCode != "cancel_attempt_drift" || event.CancelConfirmed) {
-			t.Fatal("observed rerun attempt was discarded")
+		operationID = event.OperationID
+		if !protocol.UUID(operationID) || !event.PostAttempted || !event.CancelRequested || event.ObservedAttempt != 2 || event.ErrorCode != "cancel_attempt_drift" || event.CancelConfirmed {
+			t.Fatal("compact outcome lost cancellation uncertainty")
 		}
 	}
 	public, _ := json.Marshal(r)
@@ -244,7 +241,7 @@ func TestCancellationAttemptDriftPreservesRequest(t *testing.T) {
 	}
 }
 
-func TestCancellationRecordFailurePreventsWrite(t *testing.T) {
+func TestCancellationOutcomeFailureRefusesSuccess(t *testing.T) {
 	x := fixture()
 	run := fixtureRun(x)
 	run.Status = "in_progress"
@@ -252,6 +249,11 @@ func TestCancellationRecordFailurePreventsWrite(t *testing.T) {
 	c, _ := New("synthetic", time.Second, transportFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method == "POST" {
 			posts++
+			return reply(202, nil), nil
+		}
+		if posts > 0 {
+			run.Status = "completed"
+			run.Conclusion = "cancelled"
 		}
 		return reply(200, run), nil
 	}))
@@ -259,7 +261,7 @@ func TestCancellationRecordFailurePreventsWrite(t *testing.T) {
 		return errors.New("synthetic private disk failure")
 	})
 	var failure *Failure
-	if !errors.As(e, &failure) || failure.Code != "missing_evidence" || posts != 0 || r.Operation.CancelRequested || r.Operation.CancelConfirmed {
+	if !errors.As(e, &failure) || failure.Code != "missing_evidence" || posts != 1 || r.Operation.CancelConfirmed {
 		t.Fatal("cancellation proceeded without durable private evidence")
 	}
 }
@@ -408,5 +410,122 @@ func TestProviderJSONRejectsDuplicatesAndMalformedUnicode(t *testing.T) {
 		if _, e := c.Request(context.Background(), "GET", "synthetic", nil, new(any)); e == nil {
 			t.Fatal("ambiguous provider JSON accepted")
 		}
+	}
+}
+
+func TestPublishedKitIncludesCurrentRevocationAuthority(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "docs", "revoked-signer-fingerprints")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal("current kit revocation ledger missing")
+	}
+	if _, err := revokedFingerprints(raw); err != nil {
+		t.Fatal("current kit revocation ledger invalid")
+	}
+	head, err := Git(context.Background(), root, 1024, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal("kit head unavailable")
+	}
+	blob, err := Git(context.Background(), root, 65536, "show", strings.TrimSpace(string(head))+":docs/revoked-signer-fingerprints")
+	if err != nil || !bytes.Equal(raw, blob) {
+		t.Fatal("revocation authority must be committed at the current kit revision")
+	}
+}
+
+func TestSignatureToolsIgnoreAmbientPathOrder(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", root)
+	for _, name := range []string{"git", "ssh-keygen"} {
+		got, err := TrustedExecutable(name, root)
+		expected := signatureTool(name)
+		if machine, loadErr := config.LoadMachine(); loadErr == nil {
+			if registered, ok := machine.Tools[name]; ok {
+				expected = registered
+			}
+		}
+		want, linkErr := filepath.EvalSymlinks(expected)
+		if err != nil || linkErr != nil || got != want {
+			t.Fatal("OS signature tool unavailable or PATH-selected")
+		}
+	}
+	if _, err := TrustedExecutable("unregistered-tool", root); err == nil {
+		t.Fatal("unregistered PATH tool accepted")
+	}
+}
+
+func TestWaitCompatibilityCommandReadsStatusOnce(t *testing.T) {
+	x := fixture()
+	run := fixtureRun(x)
+	run.Status = "in_progress"
+	reads := 0
+	c, _ := New("synthetic", time.Second, transportFunc(func(r *http.Request) (*http.Response, error) {
+		reads++
+		if strings.HasSuffix(r.URL.Path, "/jobs") {
+			return reply(200, map[string]any{"total_count": 0, "jobs": []apiJob{}}), nil
+		}
+		return reply(200, run), nil
+	}))
+	c.Sleep = func(context.Context, time.Duration) error { t.Fatal("one-shot observation slept"); return nil }
+	r, e := c.Wait(context.Background(), x, "wait", "0.1.0-dev")
+	if e != nil || r.ExitCode != 8 || reads != 2 || r.AdmissionEligible {
+		t.Fatal("one-shot status failed")
+	}
+}
+
+func TestCancellationHasOnePostOneOutcomeAndNoPolling(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		status            int
+		after, conclusion string
+		drift             bool
+		want              string
+		confirmed         bool
+	}{
+		{"confirmed", 202, "completed", "cancelled", false, "", true},
+		{"unconfirmed", 202, "in_progress", "", false, "missing_evidence", false},
+		{"lost-acknowledgement", 503, "completed", "cancelled", false, "missing_evidence", false},
+		{"attempt-drift", 202, "completed", "cancelled", true, "cancel_attempt_drift", false},
+		{"finished-before-cancel", 202, "completed", "success", false, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			x := fixture()
+			run := fixtureRun(x)
+			run.Status = "in_progress"
+			posts, gets, outcomes := 0, 0, 0
+			c, _ := New("synthetic", time.Second, transportFunc(func(req *http.Request) (*http.Response, error) {
+				if req.Method == "POST" {
+					posts++
+					return reply(tc.status, nil), nil
+				}
+				gets++
+				if posts > 0 {
+					run.Status = tc.after
+					run.Conclusion = tc.conclusion
+					if tc.drift {
+						run.RunAttempt = 2
+					}
+				}
+				return reply(200, run), nil
+			}))
+			c.Sleep = func(context.Context, time.Duration) error { t.Fatal("cancellation polled"); return nil }
+			r, e := c.Cancel(context.Background(), x, "0.1.0-dev", func(record CancellationRecord) error {
+				outcomes++
+				if record.CancelConfirmed != tc.confirmed {
+					t.Fatal("outcome confirmation drift")
+				}
+				return nil
+			})
+			var f *Failure
+			if tc.want != "" && (!errors.As(e, &f) || f.Code != tc.want) || tc.want == "" && e != nil || posts != 1 || gets > 2 || outcomes != 1 || r.Operation.CancelConfirmed != tc.confirmed || r.AdmissionEligible {
+				t.Fatal("unsafe cancellation outcome")
+			}
+		})
 	}
 }

@@ -77,3 +77,14 @@ func TestIOSSupportRequiresDeviceTypesAndBothFamilies(t *testing.T) {
 		t.Fatal("missing device family admitted")
 	}
 }
+
+func TestAndroidCommandLineMetadataRefusesDriftAndDuplicates(t *testing.T) {
+	if VerifyAndroidCommandLine([]byte("Pkg.Revision=12.0\n"), "12.0") != nil {
+		t.Fatal("preinstalled revision refused")
+	}
+	for _, data := range []string{"Pkg.Revision=\nPkg.Revision=12.0\n", "Pkg.Revision=13.0\n", "Pkg.Revision=12.0\nPkg.Revision=12.0\n", "Pkg.Desc=tools\n"} {
+		if VerifyAndroidCommandLine([]byte(data), "12.0") == nil {
+			t.Fatal("invalid command-line metadata accepted")
+		}
+	}
+}

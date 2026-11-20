@@ -86,3 +86,27 @@ func (r contextReader) Read(p []byte) (int, error) {
 	}
 	return r.r.Read(p)
 }
+
+// VerifyAndroidCommandLine binds the installed command-line directory metadata;
+// sdkmanager may omit this preinstalled package from its installed-package table.
+func VerifyAndroidCommandLine(data []byte, want string) error {
+	if len(data) == 0 || len(data) > 65536 || !numericVersion.MatchString(want) {
+		return ErrSupport
+	}
+	found := ""
+	seen := false
+	for _, line := range strings.Split(string(data), "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if ok && strings.TrimSpace(key) == "Pkg.Revision" {
+			if seen {
+				return ErrSupport
+			}
+			seen = true
+			found = strings.TrimSpace(value)
+		}
+	}
+	if found != want {
+		return ErrSupport
+	}
+	return nil
+}

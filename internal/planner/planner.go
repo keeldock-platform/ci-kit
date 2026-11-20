@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/keeldock-platform/ci-kit/internal/catalog"
+	"github.com/keeldock-platform/ci-kit/internal/protocol"
 	"gonum.org/v1/gonum/graph"
 	"gonum.org/v1/gonum/graph/simple"
 	"gonum.org/v1/gonum/graph/topo"
@@ -27,6 +29,7 @@ type Options struct {
 	Units, Platforms, Checks, Variants []string
 	Shard                              string
 	Admission, Quick, Qualified        bool
+	AdmittedOnly                       bool `json:"-"`
 }
 
 // Invocation is one complete check/platform/variant/shard command contract.
@@ -151,7 +154,7 @@ func DiffPaths(raw []byte) ([]string, error) {
 		}
 	}
 	sort.Strings(paths)
-	return unique(paths), nil
+	return slices.Compact(paths), nil
 }
 func safeTransport(p string) bool {
 	if p == "" || strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\,:\r\n\t\x00") {
@@ -261,7 +264,7 @@ func Select(root string, units []catalog.Unit, changed []string, opts Options) (
 	}
 	selected := map[string]map[string]bool{}
 	for _, u := range units {
-		if !contains(affected, u.ID) {
+		if !slices.Contains(affected, u.ID) {
 			continue
 		}
 		selected[u.ID] = map[string]bool{}
@@ -270,14 +273,14 @@ func Select(root string, units []catalog.Unit, changed []string, opts Options) (
 		}
 		global := false
 		for _, dependency := range append(append([]string{}, u.DependsOn...), u.OptionalContracts...) {
-			if contains(affected, dependency) {
+			if slices.Contains(affected, dependency) {
 				global = true
 			}
 		}
 		declaredCheckDependency := false
 		for check, policy := range u.Checks {
 			for _, dependency := range policy.DependsOn {
-				if contains(affected, dependency) {
+				if slices.Contains(affected, dependency) {
 					selected[u.ID][check] = true
 					declaredCheckDependency = true
 				}
@@ -286,12 +289,12 @@ func Select(root string, units []catalog.Unit, changed []string, opts Options) (
 		// Undeclared metadata-derived edges conservatively retain the full consumer.
 		inferred := false
 		for _, dependency := range graphDependencies[u.ID] {
-			if !contains(affected, dependency) {
+			if !slices.Contains(affected, dependency) {
 				continue
 			}
-			classified := contains(u.DependsOn, dependency) || contains(u.OptionalContracts, dependency)
+			classified := slices.Contains(u.DependsOn, dependency) || slices.Contains(u.OptionalContracts, dependency)
 			for _, policy := range u.Checks {
-				classified = classified || contains(policy.DependsOn, dependency)
+				classified = classified || slices.Contains(policy.DependsOn, dependency)
 			}
 			if !classified {
 				inferred = true
@@ -310,7 +313,7 @@ func Select(root string, units []catalog.Unit, changed []string, opts Options) (
 	}
 	sort.Strings(seeds)
 	r, e := expand(units, selected, changed, opts, false, nil)
-	r.Seeds = unique(seeds)
+	r.Seeds = slices.Compact(seeds)
 	return r, e
 }
 func highRisk(p string) bool {
@@ -361,7 +364,10 @@ func expand(units []catalog.Unit, selected map[string]map[string]bool, changed [
 				}
 			}
 		}
-		if !baseMatch || len(opts.Platforms) > 0 && !contains(opts.Platforms, entry.Platform) || len(opts.Checks) > 0 && !contains(opts.Checks, entry.Check) {
+		if opts.AdmittedOnly && !protocol.AdmittedPlatform(entry.Platform) {
+			continue
+		}
+		if !baseMatch || len(opts.Platforms) > 0 && !slices.Contains(opts.Platforms, entry.Platform) || len(opts.Checks) > 0 && !slices.Contains(opts.Checks, entry.Check) {
 			continue
 		}
 		if opts.Shard != "" && entry.Shard != opts.Shard {
@@ -413,7 +419,7 @@ func expand(units []catalog.Unit, selected map[string]map[string]bool, changed [
 						targets = append(targets, need)
 					} else {
 						for _, other := range entries {
-							if other.Unit == need && other.Platform == p && !contains(targets, other.ID) {
+							if other.Unit == need && other.Platform == p && !slices.Contains(targets, other.ID) {
 								targets = append(targets, other.ID)
 							}
 						}
@@ -471,12 +477,15 @@ func expand(units []catalog.Unit, selected map[string]map[string]bool, changed [
 			if !wanted[key(en)] {
 				continue
 			}
+			if opts.AdmittedOnly && !protocol.AdmittedPlatform(en.Platform) {
+				return Result{}, ErrInvalid
+			}
 			cmds := en.Commands
 			quickOpts := opts
 			if opts.Quick && en.Shard != "" {
 				fullOpts := opts
 				fullOpts.Quick = false
-				if reflectSame(expectedTests(findCheck(units, en.Unit, en.Check), en, changed, opts), expectedTests(findCheck(units, en.Unit, en.Check), en, nil, fullOpts)) {
+				if slices.Equal(expectedTests(findCheck(units, en.Unit, en.Check), en, changed, opts), expectedTests(findCheck(units, en.Unit, en.Check), en, nil, fullOpts)) {
 					quickOpts.Quick = false
 				}
 			}
@@ -502,23 +511,7 @@ func expand(units []catalog.Unit, selected map[string]map[string]bool, changed [
 	return result, nil
 }
 func key(e catalog.Entry) string { return e.ID + "\x00" + e.Variant + "\x00" + e.Shard }
-func contains(xs []string, x string) bool {
-	for _, v := range xs {
-		if v == x {
-			return true
-		}
-	}
-	return false
-}
-func unique(xs []string) []string {
-	out := xs[:0]
-	for _, x := range xs {
-		if len(out) == 0 || out[len(out)-1] != x {
-			out = append(out, x)
-		}
-	}
-	return out
-}
+
 func findCheck(units []catalog.Unit, id, check string) catalog.Check {
 	for _, u := range units {
 		if u.ID == id {
@@ -575,7 +568,7 @@ func relatedCommands(c catalog.Check, commands []catalog.Command, changed []stri
 		}
 	}
 	sort.Strings(tests)
-	tests = unique(tests)
+	tests = slices.Compact(tests)
 	if len(tests) == 0 {
 		return commands
 	}
@@ -652,7 +645,7 @@ func expectedTests(c catalog.Check, e catalog.Entry, changed []string, opts Opti
 		}
 		narrowed := []string{}
 		for _, test := range tests {
-			if contains(related, test) {
+			if slices.Contains(related, test) {
 				narrowed = append(narrowed, test)
 			}
 		}
@@ -661,18 +654,6 @@ func expectedTests(c catalog.Check, e catalog.Entry, changed []string, opts Opti
 		}
 	}
 	return tests
-}
-
-func reflectSame(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func checkRank(check string) int {

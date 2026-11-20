@@ -111,12 +111,3 @@ func (d Dispatch) Validate() error {
 func (d Dispatch) RunName() string {
 	return fmt.Sprintf("kd/%s/%s/%s/%s", d.Inputs["concern"], d.Inputs["purpose"], d.Inputs["request_id"], d.Inputs["request_digest"])
 }
-
-// ValidateExperiment leaves the production main-only validator unchanged.
-func (d Dispatch) ValidateExperiment() error {
-	if !regexp.MustCompile(`^experiment/ci-[a-z0-9][a-z0-9-]{0,63}$`).MatchString(d.Ref) || d.Inputs["concern"] != "canary" || d.Inputs["purpose"] != "feedback" {
-		return errors.New("invalid experiment")
-	}
-	d.Ref = "main"
-	return d.Validate()
-}

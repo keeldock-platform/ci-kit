@@ -57,6 +57,10 @@ func EnvironmentAllowed(env []string) bool {
 // TrustedExecutable rejects checkout executables and mutable or writable tool locations.
 func TrustedExecutable(name, root string) (string, error) {
 	p, e := exec.LookPath(name)
+	// Signature authority uses OS-installed tools, independently of mutable PATH ordering.
+	if fixed := signatureTool(name); fixed != "" {
+		p, e = fixed, nil
+	}
 	registered := false
 	if machine, err := config.LoadMachine(); err == nil {
 		if fixed, ok := machine.Tools[name]; ok {
@@ -273,4 +277,17 @@ func outsideRoot(root, path string) bool {
 		return runtime.GOOS == "windows" && filepath.IsAbs(root) && filepath.IsAbs(path) && !strings.EqualFold(filepath.VolumeName(root), filepath.VolumeName(path))
 	}
 	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func signatureTool(name string) string {
+	if name != "git" && name != "ssh-keygen" {
+		return ""
+	}
+	if runtime.GOOS == "windows" {
+		if name == "git" {
+			return `C:\Program Files\Git\cmd\git.exe`
+		}
+		return `C:\Windows\System32\OpenSSH\ssh-keygen.exe`
+	}
+	return "/usr/bin/" + name
 }

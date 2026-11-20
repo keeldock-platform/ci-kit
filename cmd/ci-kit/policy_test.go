@@ -63,7 +63,7 @@ func TestReportPathsRefuseEscapesAndLinks(t *testing.T) {
 
 func distinctSlotEnvironments() map[string]string {
 	values := map[string]string{"plan": "source-read-canary-plan"}
-	for _, platform := range protocol.Platforms {
+	for _, platform := range protocol.AdmittedPlatforms {
 		values[platform] = "source-read-canary-" + platform
 	}
 	return values
@@ -110,7 +110,7 @@ func TestCanaryEntryRequiresFixedConcernAndDistinctCompleteEnvironments(t *testi
 		{"wrong-concern", "sample", "canary-ci.yml", distinctSlotEnvironments, true, false},
 		{"canary-fallback", canaryConcern, "canary-ci.yml", func() map[string]string { return nil }, false, false},
 		{"canary-concern-via-source-entry-still-needs-map", canaryConcern, "source-ci.yml", func() map[string]string { return nil }, false, false},
-		{"missing-platform", canaryConcern, "canary-ci.yml", func() map[string]string { m := distinctSlotEnvironments(); delete(m, "windows-arm64"); return m }, true, false},
+		{"missing-platform", canaryConcern, "canary-ci.yml", func() map[string]string { m := distinctSlotEnvironments(); delete(m, "linux-debian"); return m }, true, false},
 		{"duplicate-canary-environment", canaryConcern, "canary-ci.yml", func() map[string]string { m := distinctSlotEnvironments(); m["macos-arm64"] = m["plan"]; return m }, true, false},
 		{"duplicate-production-map", "sample", "source-ci.yml", func() map[string]string { m := distinctSlotEnvironments(); m["linux-arch"] = m["plan"]; return m }, true, false},
 		{"production-fallback", "sample", "source-ci.yml", func() map[string]string { return nil }, false, true},

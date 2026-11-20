@@ -24,7 +24,15 @@ func ServeCredential(in io.Reader, out io.Writer, getenv func(string) string) er
 			break
 		}
 		k, v, ok := strings.Cut(line, "=")
-		if !ok || seen[k] {
+		if !ok {
+			return ErrRefused
+		}
+		// Git repeats capability and authentication metadata arrays. They carry no
+		// authority here; host, protocol and path must still occur exactly once.
+		if k == "capability[]" || k == "wwwauth[]" || k == "state[]" {
+			continue
+		}
+		if seen[k] {
 			return ErrRefused
 		}
 		fields[k] = v

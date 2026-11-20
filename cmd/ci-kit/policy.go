@@ -44,15 +44,15 @@ type control struct {
 }
 
 func readControl(get func(string) string) (control, error) {
-	if get("CI_ROUTE") == "experiment" {
-		return readExperimentControl(get)
-	}
 	if get("CI_ROUTE") != "" {
 		return control{}, refused
 	}
 	return readProductionControl(get)
 }
 func readProductionControl(get func(string) string) (control, error) {
+	return readPolicyControl(get)
+}
+func readPolicyControl(get func(string) string) (control, error) {
 	var c control
 	var fields map[string]json.RawMessage
 	if config.Decode([]byte(get("CI_REQUEST")), &fields, 12288) != nil {
@@ -71,6 +71,16 @@ func readProductionControl(get func(string) string) (control, error) {
 	}
 	if c.Request.Validate() != nil || config.Decode([]byte(get("CI_ADMISSION_POLICY")), &c.Policy, 16384) != nil {
 		return c, refused
+	}
+	if get("CI_KIT_OPERATION") == "pack" && !protocol.AdmittedPlatform(get("CI_PLATFORM")) {
+		return c, refused
+	}
+	if c.Request.Inputs["platforms"] != "all" {
+		for _, platform := range strings.Split(c.Request.Inputs["platforms"], ",") {
+			if !protocol.AdmittedPlatform(platform) {
+				return c, refused
+			}
+		}
 	}
 	var policyKeys map[string]json.RawMessage
 	if config.Decode([]byte(get("CI_ADMISSION_POLICY")), &policyKeys, 16384) != nil || len(policyKeys) != 10 {
@@ -116,11 +126,11 @@ func readProductionControl(get func(string) string) (control, error) {
 			return c, refused
 		}
 		if explicit {
-			if len(v.Environments) != len(protocol.Platforms)+1 {
+			if len(v.Environments) != len(protocol.AdmittedPlatforms)+1 {
 				return c, refused
 			}
 			seen := map[string]bool{}
-			for _, slot := range append([]string{"plan"}, protocol.Platforms...) {
+			for _, slot := range append([]string{"plan"}, protocol.AdmittedPlatforms...) {
 				value := v.Environments[slot]
 				if !environmentRE.MatchString(value) || seen[value] {
 					return c, refused

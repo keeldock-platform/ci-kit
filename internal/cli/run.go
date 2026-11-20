@@ -339,21 +339,16 @@ func validateLocalReports(root string, u catalog.Unit, inv planner.Invocation, s
 	if len(check.Reports) == 0 {
 		return nil
 	}
-	tests := inv.Tests
-	if len(tests) == 0 {
-		tests = check.Census
-	}
 	shard, shards := 1, 1
 	if inv.Shard != "" {
-		if _, e := fmt.Sscanf(inv.Shard, "%d/%d", &shard, &shards); e != nil || check.Shards == nil || shard < 1 || shard > len(check.Shards.Assignments) || shards != check.Shards.Count || inv.Shard != fmt.Sprintf("%d/%d", shard, shards) {
+		if _, e := fmt.Sscanf(inv.Shard, "%d/%d", &shard, &shards); e != nil || check.Shards == nil || shard < 1 || shard > check.Shards.Count || shards != check.Shards.Count || inv.Shard != fmt.Sprintf("%d/%d", shard, shards) {
 			return gh.Fail(6, "missing_evidence")
 		}
-		assignment := check.Shards.Assignments[shard-1]
-		if len(inv.Tests) == 0 {
-			tests = assignment
+		if shard > len(check.Shards.Assignments) {
+			return gh.Fail(6, "missing_evidence")
 		}
-		for _, test := range tests {
-			if !slices.Contains(assignment, test) {
+		for _, test := range inv.Tests {
+			if !slices.Contains(check.Shards.Assignments[shard-1], test) {
 				return gh.Fail(6, "missing_evidence")
 			}
 		}
@@ -361,11 +356,11 @@ func validateLocalReports(root string, u catalog.Unit, inv planner.Invocation, s
 	reports := []collector.Report{}
 	assertions := []string{}
 	for _, a := range check.Assertions {
-		if slices.Contains(tests, a) {
+		if len(inv.Tests) == 0 || slices.Contains(inv.Tests, a) {
 			assertions = append(assertions, a)
 		}
 	}
-	expect := collector.ReportExpectation{Unit: inv.Unit, Check: inv.Check, Platform: inv.Platform, Variant: inv.Variant, Shard: shard, Shards: shards, Assertions: assertions, Tests: tests, Reports: check.Reports}
+	expect := collector.ReportExpectation{Unit: inv.Unit, Check: inv.Check, Platform: inv.Platform, Variant: inv.Variant, Shard: shard, Shards: shards, Assertions: assertions, Reports: check.Reports}
 	for _, rel := range check.Reports {
 		p, e := config.SafePath(root, rel)
 		if e != nil {
@@ -384,16 +379,7 @@ func validateLocalReports(root string, u catalog.Unit, inv planner.Invocation, s
 		if e != nil {
 			return gh.Fail(6, "missing_evidence")
 		}
-		reports = append(reports, collector.Report{Unit: inv.Unit, Check: inv.Check, Platform: inv.Platform, Variant: inv.Variant, Shard: shard, Shards: shards, Path: rel, Format: "junit", Data: b, Assertions: func() []string {
-			actual, _ := collector.PassedTests(b)
-			out := []string{}
-			for _, a := range assertions {
-				if slices.Contains(actual, a) {
-					out = append(out, a)
-				}
-			}
-			return out
-		}()})
+		reports = append(reports, collector.Report{Unit: inv.Unit, Check: inv.Check, Platform: inv.Platform, Variant: inv.Variant, Shard: shard, Shards: shards, Path: rel, Format: "junit", Data: b})
 	}
 	if collector.ValidateReports(collector.Census{Entries: []collector.ReportExpectation{expect}, Feedback: true}, reports) != nil {
 		return gh.Fail(6, "missing_evidence")

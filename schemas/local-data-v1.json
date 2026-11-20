@@ -16,6 +16,7 @@
       "mode":{"enum":["unit","affected","full","candidate"]},"seed_units":{"$ref":"#/$defs/strings"},"selected_units":{"$ref":"#/$defs/strings"},"full_fallback":{"type":"boolean"},"reasons":{"$ref":"#/$defs/strings"},"graph_engine":{"const":"nx"},"base_sha":{"type":"string","pattern":"^[a-f0-9]{40}$"},"source_sha":{"type":"string","pattern":"^[a-f0-9]{40}$"}
     }},
     "run":{"type":"object","additionalProperties":false,"required":["selected_units","completed_units"],"properties":{"selected_units":{"$ref":"#/$defs/strings"},"completed_units":{"$ref":"#/$defs/strings"}}},
+    "failures":{"type":"object","additionalProperties":false,"required":["failure_count"],"properties":{"failure_count":{"type":"integer","minimum":0}}},
     "purge":{"type":"object","additionalProperties":false,"required":["deleted_result_ids","retained_unknown_count"],"properties":{"deleted_result_ids":{"$ref":"#/$defs/strings"},"retained_unknown_count":{"type":"integer","minimum":0}}}
   }
 }
