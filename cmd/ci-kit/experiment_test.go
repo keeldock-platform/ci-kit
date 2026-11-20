@@ -92,3 +92,32 @@ func TestAndroidDiagnosticHandoffCannotEnableAdmissionContinuation(t *testing.T)
 		}
 	}
 }
+
+func TestSharedSyntheticEnvironmentStaysExperimentOnly(t *testing.T) {
+	e := experimentEnvironment(t)
+	var p admissionPolicy
+	if json.Unmarshal([]byte(e["CI_EXPERIMENT_POLICY"]), &p) != nil {
+		t.Fatal("fixture")
+	}
+	p.CallerRepository = "keeldock-platform/platform-ci"
+	p.CallerRepositoryID = 1430960557
+	for slot := range p.Concerns["canary"].Environments {
+		p.Concerns["canary"].Environments[slot] = "ci-experiment"
+	}
+	raw, _ := json.Marshal(p)
+	e["CI_EXPERIMENT_POLICY"] = string(raw)
+	e["CI_REPOSITORY"] = p.CallerRepository
+	e["CI_REPOSITORY_ID"] = "1430960557"
+	e["CI_WORKFLOW_REF"] = p.CallerRepository + "/.github/workflows/devlane-synthetic.yml@" + e["CI_REF"]
+	get := func(k string) string { return e[k] }
+	if _, err := readControl(get); err != nil {
+		t.Fatal("synthetic allowance refused")
+	}
+	e["CI_ROUTE"] = ""
+	e["CI_ADMISSION_POLICY"] = string(raw)
+	e["CI_REF"] = "refs/heads/main"
+	e["CI_WORKFLOW_REF"] = p.CallerRepository + "/.github/workflows/canary-ci.yml@refs/heads/main"
+	if _, err := readControl(get); err == nil {
+		t.Fatal("production accepted shared environment")
+	}
+}

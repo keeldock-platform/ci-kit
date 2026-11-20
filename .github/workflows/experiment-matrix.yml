@@ -1,0 +1,96 @@
+name: Synthetic matrix
+on:
+  workflow_call:
+    inputs:
+      request:
+        type: string
+        required: true
+      kit_sha:
+        type: string
+        required: true
+permissions: {}
+cache-mode: none
+jobs:
+  pack:
+    name: pack-${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android-emulator
+            runner: ubuntu-24.04
+          - platform: ios-simulator
+            runner: macos-26
+          - platform: linux-arch
+            runner: ubuntu-24.04
+          - platform: linux-debian
+            runner: ubuntu-24.04
+          - platform: macos-arm64
+            runner: macos-26
+          - platform: macos-x64
+            runner: macos-15-intel
+          - platform: server-linux-arm64
+            runner: ubuntu-24.04-arm
+          - platform: server-linux-x64
+            runner: ubuntu-24.04
+          - platform: web-linux
+            runner: ubuntu-24.04
+          - platform: windows-arm64
+            runner: windows-11-arm
+          - platform: windows-x64
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    environment: ci-experiment
+    permissions:
+      contents: read
+    env:
+      CI_ROUTE: experiment
+      CI_REQUEST: ${{ inputs.request }}
+      CI_EXPERIMENT_POLICY: ${{ vars.CI_EXPERIMENT_POLICY }}
+      CI_KIT_SHA: ${{ inputs.kit_sha }}
+      CI_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+      CI_EVENT_NAME: ${{ github.event_name }}
+      CI_REPOSITORY: ${{ github.repository }}
+      CI_REPOSITORY_ID: ${{ github.repository_id }}
+      CI_REF: ${{ github.ref }}
+      CI_REF_TYPE: ${{ github.ref_type }}
+      CI_ACTOR: ${{ github.actor }}
+      CI_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      CI_FORK: ${{ github.event.repository.fork }}
+      CI_RUN_ID: ${{ github.run_id }}
+      CI_ATTEMPT: ${{ github.run_attempt }}
+      CI_KIT_OPERATION: pack
+      CI_PLATFORM: ${{ matrix.platform }}
+    steps:
+      - name: Runner
+        shell: bash
+        run: echo 'STAGE runner PASS'
+      - name: Kit
+        uses: $/.github/actions/kit-bootstrap
+        with:
+          kit-sha: ${{ inputs.kit_sha }}
+          route: experiment
+      - name: Source-free boundary regressions
+        shell: bash
+        run: |
+          cd public-control
+          if go test -mod=readonly ./cmd/ci-kit -run 'TestSharedSyntheticEnvironmentStaysExperimentOnly|TestExperimentRouteIsSeparateAndSyntheticOnly' > "$RUNNER_TEMP/boundary-test.log" 2>&1; then
+            echo 'STAGE boundary PASS'
+          else
+            echo 'STAGE boundary FAIL'
+            exit 1
+          fi
+      - name: Execute
+        id: execute
+        shell: bash
+        env:
+          SOURCE_MAP: ${{ vars.CI_EXPERIMENT_SOURCE_MAP }}
+          SOURCE_READ_01: ${{ secrets.SYNTHETIC_SOURCE_TOKEN }}
+        run: |
+          set +e
+          "$RUNNER_TEMP/ci-kit"
+          code=$?
+          printf 'code=%s\n' "$code" >> "$GITHUB_OUTPUT"
+          exit "$code"

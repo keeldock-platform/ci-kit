@@ -53,6 +53,9 @@ func readControl(get func(string) string) (control, error) {
 	return readProductionControl(get)
 }
 func readProductionControl(get func(string) string) (control, error) {
+	return readPolicyControl(get, false)
+}
+func readPolicyControl(get func(string) string, experiment bool) (control, error) {
 	var c control
 	var fields map[string]json.RawMessage
 	if config.Decode([]byte(get("CI_REQUEST")), &fields, 12288) != nil {
@@ -122,7 +125,7 @@ func readProductionControl(get func(string) string) (control, error) {
 			seen := map[string]bool{}
 			for _, slot := range append([]string{"plan"}, protocol.Platforms...) {
 				value := v.Environments[slot]
-				if !environmentRE.MatchString(value) || seen[value] {
+				if !environmentRE.MatchString(value) || seen[value] && !(experiment && alias == canaryConcern && value == "ci-experiment" && p.CallerRepository == "keeldock-platform/platform-ci" && p.CallerRepositoryID == 1430960557) {
 					return c, refused
 				}
 				seen[value] = true

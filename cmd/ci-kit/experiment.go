@@ -13,7 +13,7 @@ import (
 // Only the separately reviewed branch entry may opt into diagnostic behaviour.
 func readExperimentControl(get func(string) string) (control, error) {
 	ref := get("CI_REF")
-	if !regexp.MustCompile(`^refs/heads/experiment/ci-[a-z0-9][a-z0-9-]{0,63}$`).MatchString(ref) || get("CI_WORKFLOW_REF") != get("CI_REPOSITORY")+"/.github/workflows/experiment-ci.yml@"+ref {
+	if !regexp.MustCompile(`^refs/heads/experiment/ci-[a-z0-9][a-z0-9-]{0,63}$`).MatchString(ref) || (get("CI_WORKFLOW_REF") != get("CI_REPOSITORY")+"/.github/workflows/experiment-ci.yml@"+ref && !(get("CI_REPOSITORY") == "keeldock-platform/platform-ci" && get("CI_REPOSITORY_ID") == "1430960557" && get("CI_WORKFLOW_REF") == get("CI_REPOSITORY")+"/.github/workflows/devlane-synthetic.yml@"+ref)) {
 		return control{}, refused
 	}
 	shim := func(k string) string {
@@ -27,7 +27,7 @@ func readExperimentControl(get func(string) string) (control, error) {
 		}
 		return get(k)
 	}
-	c, err := readProductionControl(shim)
+	c, err := readPolicyControl(shim, true)
 	if err != nil || len(c.Policy.Concerns) != 1 || c.Policy.AffectedQualified || c.Request.Inputs["concern"] != "canary" || c.Request.Inputs["purpose"] != "feedback" {
 		return control{}, refused
 	}

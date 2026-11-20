@@ -69,7 +69,7 @@ runs:
                     assert e.get('CI_EXPERIMENT_POLICY') and e['CI_BOOTSTRAP_POLICY'] == e['CI_EXPERIMENT_POLICY']
                     ref = e['CI_BOOTSTRAP_REF']
                     assert re.fullmatch('refs/heads/experiment/ci-[a-z0-9][a-z0-9-]{0,63}', ref)
-                    assert e['CI_BOOTSTRAP_WORKFLOW_REF'] == e['CI_BOOTSTRAP_REPOSITORY']+'/.github/workflows/experiment-ci.yml@'+ref
+                    assert e['CI_BOOTSTRAP_WORKFLOW_REF'] in [e['CI_BOOTSTRAP_REPOSITORY']+'/.github/workflows/experiment-ci.yml@'+ref] + ([e['CI_BOOTSTRAP_REPOSITORY']+'/.github/workflows/devlane-synthetic.yml@'+ref] if e['CI_BOOTSTRAP_REPOSITORY']=='keeldock-platform/platform-ci' and e['CI_BOOTSTRAP_REPOSITORY_ID']=='1430960557' else [])
                     experiment = json.loads(e['CI_REQUEST'], object_pairs_hook=unique)
                     ep = json.loads(e['CI_BOOTSTRAP_POLICY'], object_pairs_hook=unique)
                     assert experiment['concern'] == 'canary' and experiment['purpose'] == 'feedback'
@@ -105,7 +105,7 @@ runs:
                         environments = item['environments']
                         assert type(environments) is dict and set(environments) == slots
                         assert all(type(value) is str and re.fullmatch('[a-z][a-z0-9-]{0,95}', value) for value in environments.values())
-                        assert len(set(environments.values())) == len(slots)
+                        assert len(set(environments.values())) == len(slots) or (route == 'experiment' and policy['caller_repository']=='keeldock-platform/platform-ci' and policy['caller_repository_id']==1430960557 and set(environments.values())=={'ci-experiment'})
                 request = e['CI_REQUEST']
                 assert 0 < len(request.encode()) <= 12288
                 request = json.loads(request, object_pairs_hook=unique)
