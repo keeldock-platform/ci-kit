@@ -1,6 +1,7 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
@@ -408,5 +409,28 @@ func TestProviderJSONRejectsDuplicatesAndMalformedUnicode(t *testing.T) {
 		if _, e := c.Request(context.Background(), "GET", "synthetic", nil, new(any)); e == nil {
 			t.Fatal("ambiguous provider JSON accepted")
 		}
+	}
+}
+
+func TestPublishedKitIncludesCurrentRevocationAuthority(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "docs", "revoked-signer-fingerprints")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal("current kit revocation ledger missing")
+	}
+	if _, err := revokedFingerprints(raw); err != nil {
+		t.Fatal("current kit revocation ledger invalid")
+	}
+	head, err := Git(context.Background(), root, 1024, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal("kit head unavailable")
+	}
+	blob, err := Git(context.Background(), root, 65536, "show", strings.TrimSpace(string(head))+":docs/revoked-signer-fingerprints")
+	if err != nil || !bytes.Equal(raw, blob) {
+		t.Fatal("revocation authority must be committed at the current kit revision")
 	}
 }
