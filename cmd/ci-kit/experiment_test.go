@@ -138,3 +138,16 @@ func TestAndroidCompletedSlotsRetainVariantAndShardIdentity(t *testing.T) {
 		t.Fatal("duplicate invocation reported")
 	}
 }
+
+func TestAndroidAVDNameAcceptsConsoleFramingOnly(t *testing.T) {
+	for _, data := range []string{"ci-api-35\nOK\n", "ci-api-35\r\nOK\r\n"} {
+		if !androidAVDName([]byte(data), 35) {
+			t.Fatal("valid console frame refused")
+		}
+	}
+	for _, data := range []string{"ci-api-36\r\nOK\r\n", "ci-api-35\rOK\r", "ci-api-35\n", "ci-api-35\nOK\nextra", "ci-api-35\nKO", "ci-api-35\x00\nOK", "\nci-api-35\nOK\n\n", "ci-api-35\nOK\n\n", " ci-api-35\nOK"} {
+		if androidAVDName([]byte(data), 35) {
+			t.Fatal("wrong console identity or framing accepted")
+		}
+	}
+}

@@ -284,7 +284,7 @@ func nativeHook(ctx context.Context) int {
 	if abiErr != nil || strings.TrimSpace(string(abiOut)) != "x86_64" {
 		return writeHookGate(state.Result, 25)
 	}
-	if nameErr != nil || strings.TrimSpace(string(nameOut)) != "ci-api-"+strconv.Itoa(state.API)+"\nOK" {
+	if nameErr != nil || !androidAVDName(nameOut, state.API) {
 		return writeHookGate(state.Result, 26)
 	}
 	if e != nil || packs.VerifyAndroidPackages(out, state.Packages) != nil {
@@ -430,4 +430,15 @@ func androidCompletedSlots(ctx context.Context, selected, completed []planner.In
 		diagnostic(ctx, diagnosticStage{Slot: slot, Code: 0})
 	}
 	return true
+}
+
+func androidAVDName(data []byte, api int) bool {
+	if len(data) == 0 || len(data) > 128 || api < 21 || api > 99 {
+		return false
+	}
+	framed := strings.ReplaceAll(string(data), "\r\n", "\n")
+	if strings.Contains(framed, "\r") {
+		return false
+	}
+	return strings.TrimSuffix(framed, "\n") == "ci-api-"+strconv.Itoa(api)+"\nOK"
 }
