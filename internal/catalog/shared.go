@@ -3,6 +3,7 @@ package catalog
 import (
 	"encoding/json"
 	"os"
+	"slices"
 
 	"github.com/keeldock-platform/ci-kit/internal/config"
 )
@@ -46,7 +47,7 @@ func DecodeShared(data []byte) (Shared, error) {
 		s.Units[i] = decoded
 	}
 	for platform, p := range s.Packs {
-		if !contains(Platforms, platform) || len(p.Setup) > 32 || len(p.Tools) > 64 || len(p.Support) > 16<<10 {
+		if !slices.Contains(Platforms, platform) || len(p.Setup) > 32 || len(p.Tools) > 64 || len(p.Support) > 16<<10 {
 			return Shared{}, ErrInvalid
 		}
 		for name, version := range p.Tools {

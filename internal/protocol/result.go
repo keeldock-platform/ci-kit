@@ -239,13 +239,7 @@ func (r Result) ValidateSemantics() error {
 func (r Result) Bytes() ([]byte, error) { return json.Marshal(r) }
 
 func unique(ss []string) []string {
-	m := map[string]bool{}
-	for _, s := range ss {
-		m[s] = true
-	}
-	out := make([]string, 0, len(m))
-	for s := range m {
-		out = append(out, s)
-	}
-	return out
+	out := append([]string{}, ss...)
+	slices.Sort(out)
+	return slices.Compact(out)
 }

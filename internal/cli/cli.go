@@ -270,16 +270,9 @@ func (a *app) version() *cobra.Command {
 	}}
 }
 func unique(ss []string) []string {
-	m := map[string]bool{}
-	for _, s := range ss {
-		m[s] = true
-	}
-	out := make([]string, 0, len(m))
-	for s := range m {
-		out = append(out, s)
-	}
-	sort.Strings(out)
-	return out
+	out := append([]string{}, ss...)
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 func validPlatforms(ps []string) bool {
 	for _, p := range ps {

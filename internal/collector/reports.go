@@ -7,6 +7,7 @@ import (
 	junit "github.com/joshdk/go-junit"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -39,17 +40,7 @@ func number(n int) string {
 	if n < 0 {
 		return "-"
 	}
-	if n == 0 {
-		return "0"
-	}
-	buf := [20]byte{}
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
+	return strconv.Itoa(n)
 }
 func exact(want, got []string) bool {
 	if len(want) != len(got) {
