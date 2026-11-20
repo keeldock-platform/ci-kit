@@ -22,7 +22,9 @@ function Invoke-PublicTool([string]$Tool, [string[]]$Arguments, [int]$Seconds = 
   $proc.StartInfo = $info
   $started = $false
   try {
-    $null = $proc.Start(); $started = $true
+    try { $null = $proc.Start(); $started = $true } catch {
+      return @{ Code=-1; Out=''; Err=('public native start failed: ' + $_.Exception.Message) }
+    }
     $streams = @(
       @{ Reader=$proc.StandardOutput; Buffer=[char[]]::new(4096); Text=[System.Text.StringBuilder]::new(); Limit=1MB; Done=$false },
       @{ Reader=$proc.StandardError; Buffer=[char[]]::new(4096); Text=[System.Text.StringBuilder]::new(); Limit=64KB; Done=$false }
@@ -62,8 +64,8 @@ function Test-PublicSignatureCandidate([string]$Tool, [string]$Git, [string]$Con
 }
 function Select-PublicSignatureTool([string]$Git, [string]$Base, [string]$Arch) {
   $control = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
-  $raw = Invoke-PublicTool $Git @('-C', $control, 'cat-file', 'commit', 'HEAD')
-  $allowed = Invoke-PublicTool $Git @('-C', $control, 'show', 'HEAD:docs/commit-signers')
+  $raw = Invoke-PublicTool $Git @('-C', $control, 'cat-file', 'commit', 'HEAD') 30 $Git
+  $allowed = Invoke-PublicTool $Git @('-C', $control, 'show', 'HEAD:docs/commit-signers') 30 $Git
   if ($raw.Code -ne 0 -or $allowed.Code -ne 0) { throw 'public signer fixture' }
   $signature = [System.Text.StringBuilder]::new()
   $inside = $false
@@ -81,7 +83,7 @@ function Select-PublicSignatureTool([string]$Git, [string]$Base, [string]$Arch) 
   [System.IO.File]::WriteAllText($signers, $allowed.Out, $utf8)
   [System.IO.File]::WriteAllText($sig, $signature.ToString().Replace("`r`n", "`n"), $utf8)
   Write-Host ('PUBLIC_SIGNERS cr=' + @($allowed.Out.ToCharArray() | Where-Object { $_ -eq "`r" }).Count + ' bytes=' + (Get-Item -LiteralPath $signers).Length + ' space-path=true argv=ArgumentList')
-  $time = Invoke-PublicTool $Git @('-C', $control, 'show', '-s', '--format=%ct', 'HEAD')
+  $time = Invoke-PublicTool $Git @('-C', $control, 'show', '-s', '--format=%ct', 'HEAD') 30 $Git
   if ($time.Code -ne 0) { throw 'public signature time' }
   $verifyTime = [DateTimeOffset]::FromUnixTimeSeconds([long]$time.Out.Trim()).UtcDateTime.ToString('yyyyMMddHHmmss')
   $arguments = @('-vvv','-Y','find-principals','-f',$signers,'-s',$sig,('-Overify-time=' + $verifyTime))
