@@ -21,7 +21,7 @@ func TestSourceFreeCandidateBootstrapDoesNotGrantSourceAuthority(t *testing.T) {
 		t.Fatal(e)
 	}
 	start := "        python3 -I - <<'PYTHON'\n"
-	parts := strings.SplitN(string(raw), start, 2)
+	parts := strings.SplitN(strings.ReplaceAll(string(raw), "\r\n", "\n"), start, 2)
 	if len(parts) != 2 {
 		t.Fatal("bootstrap authority script missing")
 	}
@@ -97,7 +97,7 @@ func TestBootstrapCanaryEnvironmentIsolation(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	parts := strings.SplitN(string(raw), "        python3 -I - <<'PYTHON'\n", 2)
+	parts := strings.SplitN(strings.ReplaceAll(string(raw), "\r\n", "\n"), "        python3 -I - <<'PYTHON'\n", 2)
 	if len(parts) != 2 {
 		t.Fatal("bootstrap script missing")
 	}
