@@ -18,6 +18,7 @@ import (
 type containerAdapter struct {
 	run              Execute
 	docker, id, user string
+	browsers         string
 }
 
 // Container uses Docker's maintained lifecycle and exec commands. It owns one
@@ -60,7 +61,7 @@ func containerWithExecutor(ctx context.Context, platform string, s ContainerSupp
 	if _, e := os.Lstat(cidfile); !os.IsNotExist(e) {
 		return nil, ErrSupport
 	}
-	a := &containerAdapter{run: run, docker: docker, user: uid + ":" + gid}
+	a := &containerAdapter{run: run, docker: docker, user: uid + ":" + gid, browsers: "/ms-playwright"}
 	success := false
 	defer func() {
 		if !success && a.id != "" {
@@ -69,7 +70,7 @@ func containerWithExecutor(ctx context.Context, platform string, s ContainerSupp
 			}
 		}
 	}()
-	out, e = run(ctx, []string{docker, "run", "--detach", "--rm", "--name", name, "--label", "ci.owner=" + name, "--cidfile", cidfile, "--platform", "linux/amd64", "--mount", "type=bind,src=" + sourceParent + ",dst=" + sourceParent, "--mount", "type=bind,src=" + kit + ",dst=/public-control,readonly", "--workdir", "/", "--entrypoint", "/bin/sleep", s.Image, "infinity"}, ".", time.Minute, nil)
+	out, e = run(ctx, []string{docker, "run", "--init", "--detach", "--rm", "--name", name, "--label", "ci.owner=" + name, "--cidfile", cidfile, "--platform", "linux/amd64", "--mount", "type=bind,src=" + sourceParent + ",dst=" + sourceParent, "--mount", "type=bind,src=" + kit + ",dst=/public-control,readonly", "--workdir", "/", "--entrypoint", "/bin/sleep", s.Image, "infinity"}, ".", time.Minute, nil)
 	// Docker owns the cidfile write, in a host-owned private directory. Recover
 	// identity even if its client is cancelled before it returns stdout.
 	if st, statErr := os.Lstat(cidfile); statErr == nil && st.Mode().IsRegular() && st.Size() <= 128 {
@@ -125,6 +126,16 @@ func containerWithExecutor(ctx context.Context, platform string, s ContainerSupp
 	if _, e = run(ctx, []string{docker, "exec", "--user", "0", id, "install", "-d", "-o", uid, "-g", gid, "/tmp/ci-home"}, ".", 30*time.Second, nil); e != nil {
 		return nil, ErrSupport
 	}
+	if platform == "web-linux" {
+		entries, err := run(ctx, []string{docker, "exec", id, "/bin/ls", "-1", "/ms-playwright"}, ".", 30*time.Second, nil)
+		if err != nil {
+			return nil, ErrSupport
+		}
+		a.browsers, err = prepareFirefox(ctx, sourceParent, strings.Fields(string(entries)))
+		if err != nil {
+			return nil, ErrSupport
+		}
+	}
 	success = true
 	return a, nil
 }
@@ -133,7 +144,7 @@ func (a *containerAdapter) Wrap(argv []string, source, cwd string) ([]string, st
 	if e != nil || len(argv) == 0 {
 		return nil, "", nil, ErrSupport
 	}
-	args := []string{a.docker, "exec", "--user", a.user, "--workdir", work, "--env", "HOME=/tmp/ci-home", "--env", "PATH=/tmp/ci-home/.cargo/bin:/tmp/ci-home/.local/bin:/usr/local/bin:/usr/bin:/bin", "--env", "CI=true", "--env", "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright", "--env", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1", a.id}
+	args := []string{a.docker, "exec", "--user", a.user, "--workdir", work, "--env", "HOME=/tmp/ci-home", "--env", "PATH=/tmp/ci-home/.cargo/bin:/tmp/ci-home/.local/bin:/usr/local/bin:/usr/bin:/bin", "--env", "CI=true", "--env", "PLAYWRIGHT_BROWSERS_PATH=" + a.browsers, "--env", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1", a.id}
 	args = append(args, argv...)
 	return args, ".", nil, nil
 }

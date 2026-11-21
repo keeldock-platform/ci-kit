@@ -6,7 +6,7 @@ import (
 	"errors"
 	junit "github.com/joshdk/go-junit"
 	"io"
-	"path/filepath"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,6 +31,12 @@ type Report struct {
 	Shard, Shards                  int
 	Path, Format                   string
 	Data                           []byte
+}
+
+// Manifest report paths use portable forward slashes on every runner. Reject
+// Windows aliases too, including drive-relative paths and alternate data streams.
+func canonicalReportPath(p string) bool {
+	return p != "" && p != "." && p != ".." && !path.IsAbs(p) && path.Clean(p) == p && !strings.HasPrefix(p, "../") && !strings.ContainsAny(p, "\\:\x00\r\n")
 }
 
 func reportKey(unit, check, platform, variant string, shard, shards int) string {
@@ -86,7 +92,7 @@ func ValidateReports(c Census, reports []Report) error {
 		if _, ok := expected[key]; !ok {
 			return ErrReports
 		}
-		if r.Path == "" || filepath.IsAbs(r.Path) || filepath.Clean(r.Path) != r.Path || r.Path == ".." || strings.HasPrefix(r.Path, ".."+string(filepath.Separator)) || r.Format != "junit" {
+		if !canonicalReportPath(r.Path) || r.Format != "junit" {
 			return ErrReports
 		}
 		observed, e := reportTests(r.Data)

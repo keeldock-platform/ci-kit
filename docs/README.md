@@ -18,7 +18,10 @@ credentials, bind no environment and are absent from the finalizer dependencies.
 Explicit requests for those targets refuse before acquisition. They join only
 through a separately reviewed qualification change.
 
-Source execution is main-only. Experiment entrypoints, shared experiment readers
-and diagnostic continuation are excluded. All ordinary checks stop at their first
-failure. Full/affected/quick, variants, shards and local feedback remain available;
+Source execution is main-only. Experiment entrypoints and shared experiment readers
+are excluded. Feedback runs let independent platform packs finish and report their
+own failures; coordinator watchers must not cancel feedback on an ordinary pack
+failure. Admission retains fail-fast cancellation. Inside each pack, failed
+prerequisites stop dependent execution and trusted cleanup still runs. Full/affected/quick,
+variants, shards and local feedback remain available;
 affected qualification remains disabled until its required evidence exists.

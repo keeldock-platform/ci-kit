@@ -124,3 +124,22 @@ func TestMandatoryPrivacyInvariantMustPassWithoutSkipOrDuplicate(t *testing.T) {
 		}
 	}
 }
+
+func TestPortableNestedReportPaths(t *testing.T) {
+	for _, p := range []string{"target/nextest/ci/junit.xml", "reports/browser/junit.xml", "report.xml"} {
+		c, r := reportFixture()
+		c.Entries[0].Reports = []string{p}
+		r[0].Path = p
+		if err := ValidateReports(c, r); err != nil {
+			t.Fatalf("portable path refused: %q: %v", p, err)
+		}
+	}
+	for _, p := range []string{"", ".", "..", "../report.xml", "a/../../report.xml", "/report.xml", "//server/report.xml", `C:\report.xml`, `C:report.xml`, `a\report.xml`, "report.xml:stream", "a//report.xml", "a/./report.xml", "a/../report.xml", "a/report.xml/", "a/\x00.xml", "a/\n.xml", "a/\r.xml"} {
+		c, r := reportFixture()
+		c.Entries[0].Reports = []string{p}
+		r[0].Path = p
+		if ValidateReports(c, r) == nil {
+			t.Fatalf("hostile path accepted: %q", p)
+		}
+	}
+}
