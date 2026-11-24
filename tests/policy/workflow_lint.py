@@ -20,7 +20,7 @@ def project(text, action_lines=()):
         # For static input checking the same action metadata is used. Published
         # workflows retain $/ resolution at their owning workflow revision.
         if number in action_lines:
-            line = re.sub(r'^(\s*(?:-\s+)?uses:\s+)\$/\.github/actions/([a-z][a-z0-9-]*)(\s*(?:#.*)?)$', r'\1./.github/actions/\2\3', line)
+            line = re.sub(r'^(\s*(?:-\s+)?uses:\s+)\$/([a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)+)(\s*(?:#.*)?)$', r'\1./\2\3', line)
         lines.append(line)
     return ''.join(lines)
 
@@ -42,7 +42,7 @@ def main():
     native = []
     unchanged = []
     try:
-        raw = subprocess.run([str(tool), '-format', '{{json .}}'], cwd=root, capture_output=True, timeout=180)
+        raw = subprocess.run([str(tool), '-format', '{{json .}}'], cwd=root, capture_output=True, timeout=110)
         diagnostics = json.loads(raw.stdout or b'[]')
         if not isinstance(diagnostics, list) or raw.returncode not in (0, 1):
             raise ValueError('invalid linter response')
@@ -57,8 +57,8 @@ def main():
             if diagnostic['kind'] == 'syntax-check' and diagnostic['message'] == cache_message and line == 'cache-mode: none':
                 continue
             valid_action = False
-            for name in [p.parent.name for p in (root / '.github/actions').glob('*/action.yml')]:
-                ref = '$/.github/actions/' + name
+            for metadata in [*root.rglob('action.yml'), *root.rglob('action.yaml')]:
+                ref = '$/' + metadata.parent.relative_to(root).as_posix()
                 message = 'specifying action "' + ref + '" in invalid format because ref is missing. available formats are "{owner}/{repo}@{ref}" or "{owner}/{repo}/{path}@{ref}"'
                 if diagnostic['kind'] == 'action' and diagnostic['message'] == message and re.fullmatch(r'\s*(?:-\s+)?uses:\s+' + re.escape(ref) + r'\s*(?:#.*)?', line):
                     action_lines.setdefault(file, set()).add(line_number)
@@ -69,11 +69,8 @@ def main():
             original = file.read_text(encoding='utf-8')
             projected = project(original, action_lines.get(file, ()))
             (native if projected != original else unchanged).append((file, projected))
-        if unchanged:
-            p = subprocess.run([str(tool), *[str(f) for f, _ in unchanged]], cwd=root, capture_output=True, timeout=180)
-            if p.returncode:
-                print('FAIL workflow_lint')
-                return 1
+        # The initial JSON invocation already validated every unchanged workflow.
+        # Re-run only native projections after accounting for every diagnostic.
         for file, text in native:
             name = file.relative_to(root).as_posix()
             p = subprocess.run([str(tool), '-stdin-filename', name, '-'], input=text.encode(), cwd=root, capture_output=True, timeout=120)

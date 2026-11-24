@@ -16,3 +16,4 @@ runs:
         ref: ${{ inputs.ref }}
         path: caller-control
         persist-credentials: false
+        fetch-depth: 0

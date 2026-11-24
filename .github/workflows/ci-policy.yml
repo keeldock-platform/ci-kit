@@ -46,7 +46,12 @@ jobs:
           python3 -B tests/policy/layout.py
           python3 -B tests/policy/workflow_lint.py --actionlint "$RUNNER_TEMP/policy-tools/actionlint"
           python3 -B tests/policy/workflow_lint.py --root ../caller-control --actionlint "$RUNNER_TEMP/policy-tools/actionlint"
-          (cd ../caller-control && "$RUNNER_TEMP/policy-tools/gh-actions-lock" --verify --fail-on-warning)
+          python3 -B tests/policy/workflow_lock.py --root ../caller-control --tool "$RUNNER_TEMP/policy-tools/gh-actions-lock" --kit-sha "$REVIEWED_KIT_SHA"
+          python3 -B tests/policy/public_tree_scan.py --root ../caller-control
+          python3 -B tests/policy/public_tree_scan.py --root .
+          mapfile -t caller_workflows < <(python3 -B tests/policy/layout.py --root ../caller-control --workflow-paths)
+          mapfile -t caller_actions < <(python3 -B tests/policy/layout.py --root ../caller-control --action-paths)
+          (cd ../caller-control && "$RUNNER_TEMP/policy-tools/zizmor" --no-progress --no-config "${caller_workflows[@]}" "${caller_actions[@]}")
           mapfile -t workflows < <(python3 -B tests/policy/layout.py --workflow-paths)
           "$RUNNER_TEMP/policy-tools/zizmor" --no-progress "${workflows[@]}" .github/actions
           "$RUNNER_TEMP/policy-tools/gh-actions-lock" --verify --fail-on-warning "${workflows[@]}"
