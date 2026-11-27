@@ -193,7 +193,7 @@ jobs:
         working-directory: public-control
         env:
           GOTOOLCHAIN: local
-        run: go test -mod=readonly ./cmd/ci-kit -run '^(TestLockToolsCandidateRouteGuard|TestLockToolsNormalRoutes|TestCandidateReceiptWriteContract|TestCandidateReceiptWriteFailuresRemovePartialFile|TestLockToolsBoundedCaptureUsesExistingOwnerCleanup)$' -count=1 -timeout=6m
+        run: go test -mod=readonly ./cmd/ci-kit -run '^(TestLockToolsCandidateRouteGuard|TestLockToolsNormalRoutes|TestCandidateReceiptWriteContract|TestCandidateReceiptWriteFailuresRemovePartialFile|TestLockToolsBoundedCaptureUsesExistingOwnerCleanup|TestReadQualificationCaptureBoundsAndTruncation|TestReadQualificationCaptureRefusesMissingSymlinkAndDirectory|TestQualificationFailureLineEscapesControlAndWorkflowCommands)$' -count=1 -timeout=6m
       - name: Test Python to Go staging tree contract
         working-directory: public-control
         env:

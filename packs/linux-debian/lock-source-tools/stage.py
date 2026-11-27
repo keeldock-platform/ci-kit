@@ -6,16 +6,78 @@ No source checkout, install, lifecycle, npx, system mutation or credential exist
 in this child. Subcommands inherit that process group; no second cleanup owner.
 """
 from pathlib import Path, PurePosixPath
-import base64,gzip,hashlib,io,json,os,platform,re,selectors,shutil,struct,subprocess,sys,tarfile,urllib.request
+import base64,gzip,hashlib,io,json,os,platform,re,selectors,shutil,struct,subprocess,sys,tarfile,urllib.request,traceback
+from collections import deque
 
 HERE=Path(__file__).resolve().parent
 class Refused(Exception):pass
 class CaptureRefused(Refused):
-    def __init__(self,record):
-        super().__init__('tool_capture_refused');self.record=record
+    def __init__(self,record,stdout=b'',stderr=b'',reason=''):
+        super().__init__('tool_capture_refused');self.record=record;self.stdout=stdout[:65536];self.stderr=stderr[:65536];self.stdout_truncated=len(stdout)>65536;self.stderr_truncated=len(stderr)>65536;self.reason=reason[:256]
 def require(value):
     if not value:raise Refused('tool_stage_refused')
 def digest(raw):return hashlib.sha256(raw).hexdigest()
+def qualification_error_payload(error):
+    # Bound before formatting: preserve the exception identity/message separately
+    # from a small tail of traceback frames.
+    cls=type(error).__name__[:120]
+    try: message=str(error)[:700]
+    except Exception: message='<exception message unavailable>'
+    message=''.join(c if c in '\n\t' or ord(c)>=32 and ord(c)!=127 else '?' for c in message)
+    message=message[:700]
+    frames=deque(maxlen=8); tb=error.__traceback__; visited=0
+    while tb is not None and visited<32:
+        frames.append(tb);tb=tb.tb_next;visited+=1
+    frame_lines=[]
+    for frame in frames:
+        code=frame.tb_frame.f_code
+        frame_lines.append(f"  {code.co_name[:48]} ({Path(code.co_filename).name[:64]}:{frame.tb_lineno})\n")
+    frame_text=''.join(frame_lines)
+    omitted=tb is not None or visited>len(frames)
+    return {'qualification_phase':'tool-qualification','exception_class':cls,'exception_message':message,
+            'traceback_frames':frame_text,'frames_omitted':omitted,
+            'truncated':len(message)>=700 or omitted}
+def qualification_failure_output(error, mode):
+    """Return valid bounded bytes; stage keeps its historical metadata-only envelope."""
+    payload={'tool_child_outcome':error.record} if isinstance(error,CaptureRefused) else {}
+    if mode not in ('qualify','qualify-candidate'):
+        return (json.dumps(payload,sort_keys=True,separators=(',',':'))+'\n').encode()
+    if isinstance(error,CaptureRefused):
+        def head_tail(raw):
+            text=raw.decode('utf-8','backslashreplace'); truncated=len(text)>132
+            return (text[:32]+' … '+text[-96:] if truncated else text),truncated
+        out,outcut=head_tail(error.stdout); err,errcut=head_tail(error.stderr)
+        payload.update({'qualification_phase':'child-tool','qualification_error':error.reason or 'captured child failed',
+            'child_stdout':out,'child_stderr':err,
+            'stdout_truncated':error.stdout_truncated or outcut or error.record.get('overflow_stream')=='stdout',
+            'stderr_truncated':error.stderr_truncated or errcut or error.record.get('overflow_stream')=='stderr',
+            'truncated':error.stdout_truncated or error.stderr_truncated or outcut or errcut or bool(error.record.get('overflow_stream'))})
+    else: payload.update(qualification_error_payload(error))
+    # JSON escaping can expand controls sixfold. Fit the serialized envelope,
+    # trimming useful text on UTF-8 boundaries until the complete record fits.
+    cap=4096
+    allowances={'exception_class':80,'exception_message':220,'traceback_frames':160,
+                'qualification_error':220,'child_stdout':132,'child_stderr':132}
+    for field,allowance in allowances.items():
+        if field in payload:
+            value=payload[field]
+            if len(value)>allowance and field in ('child_stdout','child_stderr'):
+                payload[field]=value[:32]+' … '+value[-96:]
+            else: payload[field]=value[:allowance]
+            if len(value)>allowance: payload['truncated']=True
+    for field in ('child_stderr','child_stdout','traceback_frames','qualification_error','exception_message','exception_class'):
+        if field not in payload: continue
+        original=payload[field]
+        while True:
+            raw=(json.dumps(payload,sort_keys=True,separators=(',',':'),ensure_ascii=False)+'\n').encode('utf-8')
+            if len(raw)<=cap: return raw
+            if len(payload[field])==0: break
+            payload['truncated']=True
+            payload[field]=payload[field][:max(0,len(payload[field])-max(1,len(raw)-cap))]
+    payload['truncated']=True
+    minimal={'qualification_phase':payload.get('qualification_phase','tool-qualification'),'truncated':True}
+    if isinstance(error,CaptureRefused): minimal['tool_child_outcome']=error.record
+    return (json.dumps(minimal,sort_keys=True,separators=(',',':'))+'\n').encode()
 def canonical(value):
     # Names are constrained to ASCII without Go's HTML-sensitive characters.
     return json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
@@ -59,7 +121,7 @@ def command(argv,work):
     env={'PATH':'/usr/bin:/bin','HOME':str(work),'CI':'true','npm_config_offline':'true','npm_config_ignore_scripts':'true','npm_config_update_notifier':'false','PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD':'1'}
     try:child=subprocess.Popen(argv,cwd=work,env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=False)
     except OSError as error:
-        raise CaptureRefused({'exit_code':None,'signal':None,'overflow_stream':None,'error':error.errno,'child_exit_observed':False,'stdout_bytes':0,'stderr_bytes':0,'outer_cleanup_required':True,'started':False}) from None
+        raise CaptureRefused({'exit_code':None,'signal':None,'overflow_stream':None,'error':error.errno,'child_exit_observed':False,'stdout_bytes':0,'stderr_bytes':0,'outer_cleanup_required':True,'started':False},reason=str(error)) from None
     streams={'stdout':bytearray(),'stderr':bytearray()};overflow=None;error=None
     selector=selectors.DefaultSelector()
     try:
@@ -92,7 +154,7 @@ def command(argv,work):
             if not pipe.closed:pipe.close()
     status=child.poll()
     if overflow is not None or error is not None or status!=0:
-        raise CaptureRefused({'exit_code':status,'signal':-status if status is not None and status<0 else None,'overflow_stream':overflow,'error':error,'child_exit_observed':status is not None,'stdout_bytes':len(streams['stdout']),'stderr_bytes':len(streams['stderr']),'outer_cleanup_required':True,'started':True})
+        raise CaptureRefused({'exit_code':status,'signal':-status if status is not None and status<0 else None,'overflow_stream':overflow,'error':error,'child_exit_observed':status is not None,'stdout_bytes':len(streams['stdout']),'stderr_bytes':len(streams['stderr']),'outer_cleanup_required':True,'started':True},bytes(streams['stdout']),bytes(streams['stderr']))
     return bytes(streams['stdout'])
 
 # The total gzip expansion includes metadata, headers and padding. A complete
@@ -304,7 +366,7 @@ if __name__=='__main__':
     try:
         require(len(sys.argv)==4);run(sys.argv[1],Path(sys.argv[2]),Path(sys.argv[3]))
     except CaptureRefused as error:
-        record=(json.dumps({'tool_child_outcome':error.record},sort_keys=True,separators=(',',':'))+'\n').encode()
+        record=qualification_failure_output(error,sys.argv[1] if len(sys.argv)>1 else '')
         # Fixed bounded structured private record, no environment or raw streams.
         try:
             require(len(record)<=4096)
@@ -312,4 +374,9 @@ if __name__=='__main__':
                 count=os.write(2,record);require(count>0);record=record[count:]
         except Exception:pass
         sys.exit(6)
-    except Exception:sys.exit(6)
+    except Exception as error:
+        try:
+            if len(sys.argv)>1 and sys.argv[1] in ('qualify','qualify-candidate'):
+                os.write(2,qualification_failure_output(error,sys.argv[1]))
+        except Exception:pass
+        sys.exit(6)
