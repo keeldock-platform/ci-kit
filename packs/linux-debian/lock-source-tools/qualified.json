@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "approved": false,
+  "platform": "linux-x64",
+  "release_lock_sha256": null,
+  "tools": null,
+  "provider_receipt": null,
+  "stage_script_sha256": null
+}

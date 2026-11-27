@@ -116,6 +116,7 @@ jobs:
     env:
       CI_REQUEST: ${{ toJSON(inputs) }}
       CI_ADMISSION_POLICY: ${{ vars.CI_ADMISSION_POLICY }}
+      CI_LOCK_SOURCE_POLICY: ${{ vars.CI_LOCK_SOURCE_POLICY }}
       CI_KIT_SHA: ${{ inputs.kit_sha }}
       CI_WORKFLOW_SHA: ${{ github.workflow_sha }}
       CI_WORKFLOW_REF: ${{ github.workflow_ref }}
@@ -136,6 +137,11 @@ jobs:
         uses: $/.github/actions/kit-bootstrap
         with:
           kit-sha: ${{ inputs.kit_sha }}
+      - name: Stage exact lock-generation tools
+        if: ${{ inputs.purpose == 'source-output' }}
+        uses: $/.github/actions/lock-source-tools
+        with:
+          mode: stage
       - name: Execute
         id: execute
         shell: bash
@@ -179,3 +185,6 @@ jobs:
         uses: $/.github/actions/diagnostics-upload
         with:
           slot: linux-debian
+      - name: Encrypted lock source output
+        if: ${{ success() && steps.execute.outputs.source-output == 'ready' }}
+        uses: $/.github/actions/source-output-upload

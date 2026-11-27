@@ -48,6 +48,7 @@ func execute(ctx context.Context) int {
 }
 func privateWork(ctx context.Context, c control) (code int) {
 	code = 6
+	sourceReady := false
 	recipient, err := diagnosticRecipient()
 	if err != nil {
 		return 6
@@ -63,9 +64,8 @@ func privateWork(ctx context.Context, c control) (code int) {
 	defer func() {
 		cleanupErr := os.RemoveAll(private)
 
-		if cleanupErr != nil && code == 0 {
-			code = 1
-		}
+		if cleanupErr != nil && code == 0 { code = 1 }
+		if code == 0 && sourceReady { if output(map[string]string{"source-output": "ready"}) != nil { code = 6 } }
 	}()
 	sink := filepath.Join(private, "diagnostics")
 	if process.MakePrivateDir(sink) != nil {
@@ -183,6 +183,12 @@ func privateWork(ctx context.Context, c control) (code int) {
 	_ = os.Unsetenv("SOURCE_MAP")
 
 	root := checkout.Sources[m.Root]
+	if c.Request.Inputs["purpose"] == "source-output" {
+		stage = "private lock source output"
+		code = lockSource(ctx, c, root, private)
+		sourceReady = code == 0 && os.Getenv("CI_KIT_OPERATION") == "pack"
+		return code
+	}
 	sources := map[string]catalog.CompositionSource{}
 	for alias, path := range checkout.Sources {
 		sha := sourceSHAs[alias]

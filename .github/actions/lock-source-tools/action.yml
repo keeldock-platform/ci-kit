@@ -1,0 +1,17 @@
+name: Stage fixed source-free lock-generation tools
+description: Verify reviewed official dual-tool releases outside source acquisition
+inputs:
+  mode:
+    description: Literal qualify or stage chosen by the owning workflow
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Fixed tool stage
+      shell: bash
+      env:
+        LOCK_TOOLS_MODE: ${{ inputs.mode }}
+      run: |
+        set -euo pipefail
+        case "$LOCK_TOOLS_MODE" in qualify|stage) ;; *) exit 3 ;; esac
+        "$RUNNER_TEMP/ci-kit" tool-stage "$LOCK_TOOLS_MODE"

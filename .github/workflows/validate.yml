@@ -168,6 +168,7 @@ jobs:
     env:
       CI_REQUEST: ${{ toJSON(inputs) }}
       CI_ADMISSION_POLICY: ${{ vars.CI_ADMISSION_POLICY }}
+      CI_LOCK_SOURCE_POLICY: ${{ vars.CI_LOCK_SOURCE_POLICY }}
       CI_KIT_SHA: ${{ inputs.kit_sha }}
       CI_WORKFLOW_SHA: ${{ github.workflow_sha }}
       CI_WORKFLOW_REF: ${{ github.workflow_ref }}

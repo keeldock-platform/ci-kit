@@ -226,7 +226,7 @@ func (a *app) command() *cobra.Command {
 		return nil
 	}
 	root.SetHelpFunc(func(c *cobra.Command, args []string) { a.result.Command = "text"; fmt.Fprint(a.out, c.UsageString()) })
-	root.AddCommand(a.version(), a.doctor(), a.list(), a.explain(), a.run(), a.dispatch(), a.remote("status"), a.remote("wait"), a.remote("failures"), a.remote("cancel"), a.results(), a.completion(root))
+	root.AddCommand(a.version(), a.doctor(), a.list(), a.explain(), a.run(), a.dispatch(), a.remote("status"), a.remote("wait"), a.remote("failures"), a.remote("cancel"), a.remote("source-output"), a.results(), a.completion(root))
 	return root
 }
 func (a *app) begin(name string, hosted bool) { a.result = protocol.New(name, Version, hosted) }
