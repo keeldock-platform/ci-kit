@@ -5,15 +5,15 @@ go 1.26.7
 toolchain go1.27.4
 
 require (
-	gopkg.in/yaml.v3 v3.0.1
 	filippo.io/age v1.3.2
-	github.com/bmatcuk/doublestar/v4 v4.9.1
+	github.com/bmatcuk/doublestar/v4 v4.10.7
 	github.com/cli/go-gh/v2 v2.17.0
 	github.com/joshdk/go-junit v1.0.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.49.0
 	gonum.org/v1/gonum v0.17.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
