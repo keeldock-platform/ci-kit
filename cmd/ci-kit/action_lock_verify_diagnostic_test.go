@@ -38,6 +38,34 @@ func TestParseVerifyFindingsKeepsOnlyAllowlistedCounts(t *testing.T) {
 	}
 }
 
+// The pinned v0.5.1 format.WriteJSON contract emits string cli_version and
+// lockfile_version fields plus findings when invoked with --json=findings.
+func TestParseVerifyFindingsMatchesPinnedV051WriterEnvelope(t *testing.T) {
+	raw := []byte(`{"cli_version":"0.5.1","lockfile_version":"1","findings":[]}`)
+	if _, ok, reason := parseVerifyFindingsReason(raw); !ok || reason != "" {
+		t.Fatalf("pinned writer envelope rejected as %s", reason)
+	}
+}
+
+func TestParseVerifyFindingsReportsOnlyFixedRejectionReason(t *testing.T) {
+	for _, c := range []struct{name string; raw []byte; want string}{
+		{"empty", nil, "empty_or_oversized"},
+		{"invalid-json", []byte(`{`), "malformed_json"},
+		{"extra-top-level-field", []byte(`{"cli_version":"v","lockfile_version":"1","findings":[],"extra":"private"}`), "envelope_shape"},
+		{"numeric-version", []byte(`{"cli_version":1,"lockfile_version":"1","findings":[]}`), "version_field"},
+		{"missing-findings", []byte(`{"cli_version":"v","lockfile_version":"1"}`), "envelope_shape"},
+		{"wrong-findings-type", []byte(`{"cli_version":"v","lockfile_version":"1","findings":{}}`), "findings_field"},
+		{"malformed-finding", []byte(`{"cli_version":"v","lockfile_version":"1","findings":[1]}`), "findings_shape"},
+	} { t.Run(c.name, func(t *testing.T) {
+		_, ok, got := parseVerifyFindingsReason(c.raw)
+		if ok || got != c.want { t.Fatalf("fixed reason mismatch: got %s", got) }
+		d := verifyDiagnostic{result:"json_invalid", parseRejection:got}
+		var out bytes.Buffer
+		if err := writeVerifyDiagnostic(&out, d); err != nil { t.Fatal("diagnostic rejected") }
+		if strings.Contains(out.String(), "private") || !strings.Contains(out.String(), "parse_rejection="+c.want) { t.Fatal("unsafe or incomplete diagnostic") }
+	}) }
+}
+
 func TestParseVerifyFindingsUnknownAndInvalidCases(t *testing.T) {
 	for _, c := range []struct {
 		name string

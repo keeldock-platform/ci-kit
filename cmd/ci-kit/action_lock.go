@@ -68,6 +68,7 @@ type verifyCounts struct {
 
 type verifyDiagnostic struct {
  result string
+ parseRejection string
  conditions map[string]bool
  counts verifyCounts
 }
@@ -77,6 +78,7 @@ var verifyResultCategories = []string{
  "capture_or_start_failure", "capture_read_failure", "json_invalid", "unknown_category",
 }
 var verifyResultConditions = []string{"timed_out", "interrupted", "capture_overflow", "cleanup_incomplete", "signal_terminated"}
+var verifyParseRejections = []string{"empty_or_oversized", "malformed_json", "envelope_shape", "version_field", "findings_field", "findings_shape", "finding_limit", "count_limit"}
 
 var verifyCategories = []string{
  "not-pinned", "ref-missing", "invalid-workflow", "sha-as-ref", "ref-changed", "ref-moved",
@@ -90,28 +92,39 @@ var verifyCategories = []string{
 var verifySeverities = []string{"error", "warning", "info", "ok"}
 
 func parseVerifyFindings(raw []byte) (verifyCounts, bool) {
+ counts, ok, _ := parseVerifyFindingsReason(raw)
+ return counts, ok
+}
+
+func parseVerifyFindingsReason(raw []byte) (verifyCounts, bool, string) {
  counts := verifyCounts{values: make(map[string]map[string]int)}
  if len(raw) == 0 || len(raw) > 2<<20 {
-  return counts, false
+  return counts, false, "empty_or_oversized"
  }
  var envelope map[string]json.RawMessage
- if json.Unmarshal(raw, &envelope) != nil || len(envelope) != 3 {
-  return counts, false
+ if json.Unmarshal(raw, &envelope) != nil {
+  return counts, false, "malformed_json"
+ }
+ if len(envelope) != 3 {
+  return counts, false, "envelope_shape"
  }
  for _, key := range []string{"cli_version", "lockfile_version"} {
   var value string
   if json.Unmarshal(envelope[key], &value) != nil || value == "" {
-   return counts, false
+   return counts, false, "version_field"
   }
  }
  rawFindings, ok := envelope["findings"]
  rawFindings = bytes.TrimSpace(rawFindings)
  if !ok || len(rawFindings) == 0 || rawFindings[0] != '[' {
-  return counts, false
+  return counts, false, "findings_field"
  }
  var findings []verifyFinding
- if json.Unmarshal(rawFindings, &findings) != nil || len(findings) > maxVerifyFindings {
-  return counts, false
+ if json.Unmarshal(rawFindings, &findings) != nil {
+  return counts, false, "findings_shape"
+ }
+ if len(findings) > maxVerifyFindings {
+  return counts, false, "finding_limit"
  }
  for _, finding := range findings {
   if !knownVerifyValue(verifyCategories, finding.Category) || !knownVerifyValue(verifySeverities, finding.Severity) {
@@ -123,11 +136,11 @@ func parseVerifyFindings(raw []byte) (verifyCounts, bool) {
   }
   current := counts.values[finding.Category][finding.Severity]
   if current >= maxVerifyCount {
-   return verifyCounts{values: make(map[string]map[string]int)}, false
+   return verifyCounts{values: make(map[string]map[string]int)}, false, "count_limit"
   }
   counts.values[finding.Category][finding.Severity] = current + 1
  }
- return counts, true
+ return counts, true, ""
 }
 
 func knownVerifyValue(allowed []string, value string) bool {
@@ -183,6 +196,9 @@ func writeVerifyDiagnostic(w io.Writer, d verifyDiagnostic) error {
    return errors.New("invalid fixed verifier condition")
   }
  }
+ if d.parseRejection != "" && !knownVerifyValue(verifyParseRejections, d.parseRejection) {
+  return errors.New("invalid fixed verifier parse rejection")
+ }
  for category, bySeverity := range d.counts.values {
   if !knownVerifyValue(verifyCategories, category) {
    return errors.New("invalid fixed verifier category")
@@ -195,6 +211,9 @@ func writeVerifyDiagnostic(w io.Writer, d verifyDiagnostic) error {
  }
  if _, err := fmt.Fprintf(w, "VERIFY_DIAGNOSTIC result=%s\n", d.result); err != nil {
   return err
+ }
+ if d.parseRejection != "" {
+  if _, err := fmt.Fprintf(w, "VERIFY_DIAGNOSTIC parse_rejection=%s\n", d.parseRejection); err != nil { return err }
  }
  for _, condition := range verifyResultConditions {
   if d.conditions[condition] {
@@ -259,7 +278,7 @@ func generateActionLock(ctx context.Context)(code int){
  verify := func() verifyDiagnostic {
   index++
   spec := process.Spec{
-   Argv: []string{filepath.Join(parent, "policy-tools", "gh-actions-lock"), "--verify", "--fail-on-warning", "--json", "findings"},
+   Argv: []string{filepath.Join(parent, "policy-tools", "gh-actions-lock"), "--verify", "--fail-on-warning", "--json=findings"},
    Root: target,
    Cwd: ".",
    ResultDir: filepath.Join(private, "capture-"+strconv.Itoa(index)),
@@ -278,9 +297,10 @@ func generateActionLock(ctx context.Context)(code int){
     d.result = "capture_read_failure"
     return d
    }
-   counts, valid := parseVerifyFindings(raw)
+   counts, valid, reason := parseVerifyFindingsReason(raw)
    if !valid {
     d.result = "json_invalid"
+    d.parseRejection = reason
     return d
    }
    d.counts = counts

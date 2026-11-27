@@ -14,7 +14,7 @@ import (
 func validPublicActionLockArgv(argv []string) bool {
  if len(argv)==2&&argv[1]=="--no-narrow" { return true }
  if len(argv)==3&&argv[1]=="--verify"&&argv[2]=="--fail-on-warning" { return true }
- return len(argv)==5&&argv[1]=="--verify"&&argv[2]=="--fail-on-warning"&&argv[3]=="--json"&&argv[4]=="findings"
+ return len(argv)==4&&argv[1]=="--verify"&&argv[2]=="--fail-on-warning"&&argv[3]=="--json=findings"
 }
 
 func RunPublicActionLock(ctx context.Context,s Spec,token string)(Result,error){

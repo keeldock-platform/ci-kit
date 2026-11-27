@@ -34,12 +34,13 @@ func TestPublicActionLockBridgeAcceptsOnlyFixedVerificationVectors(t *testing.T)
  }{
   {"generation", []string{tool, "--no-narrow"}, true},
   {"legacy-verification", []string{tool, "--verify", "--fail-on-warning"}, true},
-  {"json-findings-verification", []string{tool, "--verify", "--fail-on-warning", "--json", "findings"}, true},
-  {"arbitrary-json-field", []string{tool, "--verify", "--fail-on-warning", "--json", "workflows"}, false},
+  {"json-findings-verification", []string{tool, "--verify", "--fail-on-warning", "--json=findings"}, true},
+  {"separate-json-operand-is-not-a-value", []string{tool, "--verify", "--fail-on-warning", "--json", "findings"}, false},
+  {"arbitrary-json-field", []string{tool, "--verify", "--fail-on-warning", "--json=workflows"}, false},
   {"json-missing-findings", []string{tool, "--verify", "--fail-on-warning", "--json"}, false},
-  {"extra-argument", []string{tool, "--verify", "--fail-on-warning", "--json", "findings", "pins"}, false},
-  {"weaken-warning-gate", []string{tool, "--verify", "--json", "findings"}, false},
-  {"extra-option", []string{tool, "--verify", "--fail-on-warning", "--json", "findings", "--accept-moved"}, false},
+  {"extra-argument", []string{tool, "--verify", "--fail-on-warning", "--json=findings", "pins"}, false},
+  {"weaken-warning-gate", []string{tool, "--verify", "--json=findings"}, false},
+  {"extra-option", []string{tool, "--verify", "--fail-on-warning", "--json=findings", "--accept-moved"}, false},
  } {
   t.Run(c.name, func(t *testing.T) {
    got := validPublicActionLockArgv(c.args)
