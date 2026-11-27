@@ -74,6 +74,28 @@ class DefensiveMetadata(unittest.TestCase):
             with self.subTest(role=role),patch.object(stage,'MAX_METADATA_HEADERS',2):self.refuses_before_parser(role,complete(one*3))
             with self.subTest(role=role),patch.object(stage,'MAX_METADATA_TOTAL',len(record)*2-1):self.refuses_before_parser(role,complete(one*2))
             with self.subTest(role=role),patch.object(stage,'MAX_TAR_BYTES',1024):self.refuses_before_parser(role,complete())
+    def test_measured_metadata_header_envelope_boundary(self):
+        # 1024 is the finite measured-corpus envelope; 1025 still refuses.
+        record=pax('comment',b'x');one=frame('pax',record,tarfile.XHDTYPE)
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'at-limit.tar'
+            self.assertGreaterEqual(stage.bounded_tar(gzip.compress(one*1024+bytes(1024)),path),1024*512)
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaisesRegex(stage.Refused,'metadata header count 1025 exceeds 1024'):
+                stage.bounded_tar(gzip.compress(one*1025+bytes(1024)),Path(root)/'over-limit.tar')
+    def test_default_metadata_individual_and_aggregate_limits_have_specific_reasons(self):
+        for size in [1<<20,(1<<20)+1]:
+            raw=gzip.compress(frame('longname',bytes(size),tarfile.GNUTYPE_LONGNAME)+bytes(1024))
+            with tempfile.TemporaryDirectory() as root:
+                path=Path(root)/'size.tar'
+                if size==1<<20: self.assertGreater(stage.bounded_tar(raw,path),0)
+                else:
+                    with self.assertRaisesRegex(stage.Refused,'metadata member size 1048577 exceeds 1048576'):
+                        stage.bounded_tar(raw,path)
+        body=b''.join(frame('longname',bytes(900000),tarfile.GNUTYPE_LONGNAME) for _ in range(5))+bytes(1024)
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaisesRegex(stage.Refused,'metadata aggregate size 4500000 exceeds 4194304'):
+                stage.bounded_tar(gzip.compress(body),Path(root)/'aggregate.tar')
     def test_padding_and_end_blocks_refuse_before_parser(self):
         record=pax('comment',b'valid')
         invalid_padding=header('pax',len(record),tarfile.XHDTYPE)+record+b'x'+bytes(511-len(record))

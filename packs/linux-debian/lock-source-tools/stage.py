@@ -163,7 +163,9 @@ def command(argv,work):
 MAX_TAR_BYTES=512<<20
 MAX_METADATA_BYTES=1<<20
 MAX_METADATA_TOTAL=4<<20
-MAX_METADATA_HEADERS=128
+# Exact pinned Node 24.22.1/.2 corpora contain 978 GNU metadata headers;
+# 1024 leaves 46 headers of finite headroom. Requalify before changing pins.
+MAX_METADATA_HEADERS=1024
 # Explicit accepted PAX contract. None of these fields changes body traversal.
 # All size, GNU.sparse.*, SCHILY/vendor and charset-control forms refuse rather
 # than silently omitting files or relying on parser-specific effective offsets.
@@ -230,7 +232,9 @@ def bounded_tar(raw,path,budget=None,traversal=None):
             metadata=info.type in (tarfile.XHDTYPE,tarfile.XGLTYPE,tarfile.GNUTYPE_LONGNAME,tarfile.GNUTYPE_LONGLINK)
             if metadata:
                 metadata_count+=1;metadata_total+=info.size
-                require(info.size<=MAX_METADATA_BYTES and metadata_count<=MAX_METADATA_HEADERS and metadata_total<=MAX_METADATA_TOTAL)
+                if info.size>MAX_METADATA_BYTES:raise Refused(f'metadata member size {info.size} exceeds {MAX_METADATA_BYTES} byte limit')
+                if metadata_count>MAX_METADATA_HEADERS:raise Refused(f'metadata header count {metadata_count} exceeds {MAX_METADATA_HEADERS} header limit')
+                if metadata_total>MAX_METADATA_TOTAL:raise Refused(f'metadata aggregate size {metadata_total} exceeds {MAX_METADATA_TOTAL} byte limit')
                 data=source.read(padded);require(len(data)==padded)
                 # tarfile reads whole padded metadata blocks. Hidden records in
                 # padding must not bypass inspection of the logical PAX body.
