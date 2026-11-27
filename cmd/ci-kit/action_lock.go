@@ -1,9 +1,14 @@
 package main
 
 import (
+ "bytes"
  "context"
  "crypto/sha256"
  "encoding/hex"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "io"
  "io/fs"
  "os"
  "path/filepath"
@@ -39,7 +44,188 @@ const (
  lockFailFinalRead=27
  lockFailOutput=28
 )
-type lockOperation struct { Schema int `json:"schema_version"`; InputCommit string `json:"input_commit"`; InputTree string `json:"input_tree"`; Base string `json:"base"`; InputLockSHA256 string `json:"input_lock_sha256"` }
+type lockOperation struct {
+ Schema int `json:"schema_version"`
+ InputCommit string `json:"input_commit"`
+ InputTree string `json:"input_tree"`
+ Base string `json:"base"`
+ InputLockSHA256 string `json:"input_lock_sha256"`
+}
+
+const maxVerifyFindings = 4096
+const maxVerifyCount = 4096
+
+type verifyFinding struct {
+ Category string `json:"category"`
+ Severity string `json:"severity"`
+ Retryable bool `json:"retryable,omitempty"`
+}
+
+type verifyCounts struct {
+ values map[string]map[string]int
+ unknown int
+}
+
+type verifyDiagnostic struct {
+ result string
+ conditions map[string]bool
+ counts verifyCounts
+}
+
+var verifyResultCategories = []string{
+ "request_rejected", "tool_exit_1_findings", "tool_exit_2", "other_tool_exit",
+ "capture_or_start_failure", "capture_read_failure", "json_invalid", "unknown_category",
+}
+var verifyResultConditions = []string{"timed_out", "interrupted", "capture_overflow", "cleanup_incomplete", "signal_terminated"}
+
+var verifyCategories = []string{
+ "not-pinned", "ref-missing", "invalid-workflow", "sha-as-ref", "ref-changed", "ref-moved",
+ "tag-commit-mismatch", "stale", "misleading-sha", "unreachable-pin", "repo-renamed",
+ "repo-replaced", "repo-unavailable", "valid", "run-only", "ancestry-unknown",
+ "reachability-unknown", "onboarding-required", "version-ref", "local-action", "stale-workflow",
+ "self-repository-action", "invalid-self-repository-ref", "fresh-tag", "cooldown-config-ignored",
+ "incomplete-lockfile", "container-image",
+}
+
+var verifySeverities = []string{"error", "warning", "info", "ok"}
+
+func parseVerifyFindings(raw []byte) (verifyCounts, bool) {
+ counts := verifyCounts{values: make(map[string]map[string]int)}
+ if len(raw) == 0 || len(raw) > 2<<20 {
+  return counts, false
+ }
+ var envelope map[string]json.RawMessage
+ if json.Unmarshal(raw, &envelope) != nil || len(envelope) != 3 {
+  return counts, false
+ }
+ for _, key := range []string{"cli_version", "lockfile_version"} {
+  var value string
+  if json.Unmarshal(envelope[key], &value) != nil || value == "" {
+   return counts, false
+  }
+ }
+ rawFindings, ok := envelope["findings"]
+ rawFindings = bytes.TrimSpace(rawFindings)
+ if !ok || len(rawFindings) == 0 || rawFindings[0] != '[' {
+  return counts, false
+ }
+ var findings []verifyFinding
+ if json.Unmarshal(rawFindings, &findings) != nil || len(findings) > maxVerifyFindings {
+  return counts, false
+ }
+ for _, finding := range findings {
+  if !knownVerifyValue(verifyCategories, finding.Category) || !knownVerifyValue(verifySeverities, finding.Severity) {
+   counts.unknown++
+   continue
+  }
+  if counts.values[finding.Category] == nil {
+   counts.values[finding.Category] = make(map[string]int)
+  }
+  current := counts.values[finding.Category][finding.Severity]
+  if current >= maxVerifyCount {
+   return verifyCounts{values: make(map[string]map[string]int)}, false
+  }
+  counts.values[finding.Category][finding.Severity] = current + 1
+ }
+ return counts, true
+}
+
+func knownVerifyValue(allowed []string, value string) bool {
+ for _, candidate := range allowed {
+  if candidate == value {
+   return true
+  }
+ }
+ return false
+}
+
+func verifyFailureDiagnostic(r process.Result, err error) verifyDiagnostic {
+ d := verifyDiagnostic{
+  conditions: make(map[string]bool),
+  counts: verifyCounts{values: make(map[string]map[string]int)},
+ }
+ switch {
+ case errors.Is(err, process.ErrInvalid):
+  d.result = "request_rejected"
+ case r.ExitCode == 1 && r.ExitObserved:
+  d.result = "tool_exit_1_findings"
+ case r.ExitCode == 2:
+  d.result = "tool_exit_2"
+ case r.ExitCode > 0:
+  d.result = "other_tool_exit"
+ default:
+  d.result = "capture_or_start_failure"
+ }
+ if !errors.Is(err, process.ErrInvalid) {
+  if r.TimedOut { d.conditions["timed_out"] = true }
+  if r.Interrupted { d.conditions["interrupted"] = true }
+  if r.Overflow { d.conditions["capture_overflow"] = true }
+  if !r.CleanupComplete { d.conditions["cleanup_incomplete"] = true }
+  if r.Signal != "" { d.conditions["signal_terminated"] = true }
+ }
+ return d
+}
+
+func verifyFindingsEligible(d verifyDiagnostic) bool {
+ return d.result == "tool_exit_1_findings" && len(d.conditions) == 0
+}
+
+func emitVerifyDiagnostic(d verifyDiagnostic) {
+ _ = writeVerifyDiagnostic(os.Stdout, d)
+}
+
+func writeVerifyDiagnostic(w io.Writer, d verifyDiagnostic) error {
+ if !knownVerifyValue(verifyResultCategories, d.result) {
+  return errors.New("invalid fixed verifier result")
+ }
+ for condition, enabled := range d.conditions {
+  if enabled && !knownVerifyValue(verifyResultConditions, condition) {
+   return errors.New("invalid fixed verifier condition")
+  }
+ }
+ for category, bySeverity := range d.counts.values {
+  if !knownVerifyValue(verifyCategories, category) {
+   return errors.New("invalid fixed verifier category")
+  }
+  for severity, count := range bySeverity {
+   if !knownVerifyValue(verifySeverities, severity) || count < 0 || count > maxVerifyCount {
+    return errors.New("invalid fixed verifier count")
+   }
+  }
+ }
+ if _, err := fmt.Fprintf(w, "VERIFY_DIAGNOSTIC result=%s\n", d.result); err != nil {
+  return err
+ }
+ for _, condition := range verifyResultConditions {
+  if d.conditions[condition] {
+   if _, err := fmt.Fprintf(w, "VERIFY_DIAGNOSTIC condition=%s\n", condition); err != nil {
+    return err
+   }
+  }
+ }
+ for _, category := range verifyCategories {
+  for _, severity := range verifySeverities {
+   count := d.counts.values[category][severity]
+   if count < 0 || count > maxVerifyCount {
+    return errors.New("invalid fixed verifier count")
+   }
+   if count > 0 {
+    if _, err := fmt.Fprintf(w, "VERIFY_FINDING category=%s severity=%s count=%d\n", category, severity, count); err != nil {
+     return err
+    }
+   }
+  }
+ }
+ if d.counts.unknown < 0 || d.counts.unknown > maxVerifyFindings {
+  return errors.New("invalid fixed verifier count")
+ }
+ if d.counts.unknown > 0 {
+  if _, err := fmt.Fprintf(w, "VERIFY_FINDING category=unknown severity=unknown count=%d\n", d.counts.unknown); err != nil {
+   return err
+  }
+ }
+ return nil
+}
 func actionDigest(raw []byte)string{sum:=sha256.Sum256(raw);return hex.EncodeToString(sum[:])}
 func actionSnapshot(root string)(map[string]string,error){
  result:=map[string]string{};total:=int64(0)
@@ -70,6 +256,40 @@ func generateActionLock(ctx context.Context)(code int){
   if err!=nil||r.ExitCode!=0||!r.CleanupComplete||r.TimedOut||r.Overflow{return nil,refused}
   return readRegular(r.StdoutPath,2<<20)
  }
+ verify := func() verifyDiagnostic {
+  index++
+  spec := process.Spec{
+   Argv: []string{filepath.Join(parent, "policy-tools", "gh-actions-lock"), "--verify", "--fail-on-warning", "--json", "findings"},
+   Root: target,
+   Cwd: ".",
+   ResultDir: filepath.Join(private, "capture-"+strconv.Itoa(index)),
+   Timeout: 2 * time.Minute,
+   OutputLimit: 2 << 20,
+   Env: map[string]string{"HOME": private, "PATH": "/usr/bin:/bin", "CI": "true"},
+  }
+  r, err := process.RunPublicActionLock(ctx, spec, os.Getenv("GH_TOKEN"))
+  d := verifyFailureDiagnostic(r, err)
+  if err == nil && r.ExitCode == 0 && r.CleanupComplete && !r.TimedOut && !r.Overflow {
+   return verifyDiagnostic{}
+  }
+  if verifyFindingsEligible(d) {
+   raw, readErr := readRegular(r.StdoutPath, 2<<20)
+   if readErr != nil {
+    d.result = "capture_read_failure"
+    return d
+   }
+   counts, valid := parseVerifyFindings(raw)
+   if !valid {
+    d.result = "json_invalid"
+    return d
+   }
+   d.counts = counts
+   if counts.unknown > 0 {
+    d.result = "unknown_category"
+   }
+  }
+  return d
+ }
  controlHead,e:=call(control,[]string{"/usr/bin/git","rev-parse","HEAD"},false);if e!=nil{return lockFailControlHead};if !protocol.SHA(os.Getenv("GITHUB_SHA"))||strings.TrimSpace(string(controlHead))!=os.Getenv("GITHUB_SHA"){return 3}
  if _,e:=call(control,[]string{"/usr/bin/git","clone","--no-checkout","--depth=1","https://github.com/keeldock-platform/ci-kit.git",target},false);e!=nil{return lockFailClone}
  current,e:=call(target,[]string{"/usr/bin/git","rev-parse","origin/main"},false);if e!=nil{return lockFailMainHead};if strings.TrimSpace(string(current))!=op.Base{return 3}
@@ -82,7 +302,8 @@ func generateActionLock(ctx context.Context)(code int){
  tool:=filepath.Join(parent,"policy-tools","gh-actions-lock")
  if _,e=call(target,[]string{tool,"--no-narrow"},true);e!=nil{return lockFailGenerate}
  after,e:=actionSnapshot(target);if e!=nil{return lockFailAfterSnapshot};if !onlyActionLock(before,after){return lockFailAfterChange}
- if _,e=call(target,[]string{tool,"--verify","--fail-on-warning"},true);e!=nil{return lockFailVerify}
+ verifyDiag:=verify()
+ if verifyDiag.result!="" { emitVerifyDiagnostic(verifyDiag); return lockFailVerify }
  end,e:=actionSnapshot(target);if e!=nil{return lockFailFinalSnapshot};if !reflect.DeepEqual(after,end){return lockFailPostVerifyChange}
  raw,e:=readRegular(filepath.Join(target,generatedActionLock),2<<20);if e!=nil||len(raw)==0{return lockFailFinalRead}
  // Only the genuine generated lock is returned. No source archive/diff/log,

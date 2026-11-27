@@ -10,11 +10,16 @@ import (
  "os"
  "strings"
 )
+
+func validPublicActionLockArgv(argv []string) bool {
+ if len(argv)==2&&argv[1]=="--no-narrow" { return true }
+ if len(argv)==3&&argv[1]=="--verify"&&argv[2]=="--fail-on-warning" { return true }
+ return len(argv)==5&&argv[1]=="--verify"&&argv[2]=="--fail-on-warning"&&argv[3]=="--json"&&argv[4]=="findings"
+}
+
 func RunPublicActionLock(ctx context.Context,s Spec,token string)(Result,error){
- if token==""||strings.ContainsAny(token,"\x00\r\n")||len(s.Argv)<2||len(s.Argv)>3||s.Cwd!="."||!regularToolPath(s.Argv[0])||!outsideSource(s.Root,s.Argv[0]){return Result{ExitCode:-1},ErrInvalid}
- generation:=len(s.Argv)==2&&s.Argv[1]=="--no-narrow"
- verification:=len(s.Argv)==3&&s.Argv[1]=="--verify"&&s.Argv[2]=="--fail-on-warning"
- if !generation&&!verification{return Result{ExitCode:-1},ErrInvalid}
+ if token==""||strings.ContainsAny(token,"\x00\r\n")||len(s.Argv)<2||len(s.Argv)>5||s.Cwd!="."||!regularToolPath(s.Argv[0])||!outsideSource(s.Root,s.Argv[0]){return Result{ExitCode:-1},ErrInvalid}
+ if !validPublicActionLockArgv(s.Argv){return Result{ExitCode:-1},ErrInvalid}
  st,e:=os.Stat(s.Argv[0]);if e!=nil||st.Size()>256<<20{return Result{ExitCode:-1},ErrInvalid}
  raw,e:=os.ReadFile(s.Argv[0]);if e!=nil{return Result{ExitCode:-1},ErrInvalid}
  hash:=sha256.Sum256(raw)
