@@ -12,6 +12,7 @@ import (
  "io/fs"
  "os"
  "path/filepath"
+	"regexp"
  "reflect"
  "strconv"
  "strings"
@@ -22,6 +23,7 @@ import (
  "github.com/keeldock-platform/ci-kit/internal/protocol"
 )
 const generatedActionLock=".github/workflows/actions.lock"
+const lockInputCommit="ff0d992788d5fedf81b178b73bff45172aad9840"
 const lockInputTree="1e105ee2be7453239791d596fa89a9c42598f4dc"
 const (
  lockFailPrivateSetup=10
@@ -55,15 +57,13 @@ type lockOperation struct {
 const maxVerifyFindings = 4096
 const maxVerifyCount = 4096
 
-type verifyFinding struct {
- Category string `json:"category"`
- Severity string `json:"severity"`
- Retryable bool `json:"retryable,omitempty"`
-}
-
 type verifyCounts struct {
  values map[string]map[string]int
  unknown int
+	unknownInfo int
+	nativeValid bool
+	policyCompatible bool
+	shaAsRefWarnings int
 }
 
 type verifyDiagnostic struct {
@@ -77,8 +77,9 @@ var verifyResultCategories = []string{
  "request_rejected", "tool_exit_1_findings", "tool_exit_2", "other_tool_exit",
  "capture_or_start_failure", "capture_read_failure", "json_invalid", "unknown_category",
 }
-var verifyResultConditions = []string{"timed_out", "interrupted", "capture_overflow", "cleanup_incomplete", "signal_terminated"}
-var verifyParseRejections = []string{"empty_or_oversized", "malformed_json", "envelope_shape", "version_field", "findings_field", "findings_shape", "finding_limit", "count_limit"}
+var verifyResultConditions = []string{"timed_out", "interrupted", "capture_overflow", "capture_incomplete", "capture_read_failure", "cleanup_incomplete", "signal_terminated"}
+var verifyParseRejections = []string{"empty_or_oversized", "malformed_json", "envelope_shape", "policy_key_alias", "version_field", "valid_field", "findings_field", "findings_shape", "finding_limit", "count_limit"}
+var verifySHARefDependency = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[a-f0-9]{40}$`)
 
 var verifyCategories = []string{
  "not-pinned", "ref-missing", "invalid-workflow", "sha-as-ref", "ref-changed", "ref-moved",
@@ -97,50 +98,113 @@ func parseVerifyFindings(raw []byte) (verifyCounts, bool) {
 }
 
 func parseVerifyFindingsReason(raw []byte) (verifyCounts, bool, string) {
- counts := verifyCounts{values: make(map[string]map[string]int)}
+	counts := verifyCounts{values: make(map[string]map[string]int), policyCompatible: true}
  if len(raw) == 0 || len(raw) > 2<<20 {
   return counts, false, "empty_or_oversized"
  }
+	if config.ValidateJSON(raw, 2<<20) != nil {
+		return counts, false, "malformed_json"
+	}
  var envelope map[string]json.RawMessage
  if json.Unmarshal(raw, &envelope) != nil {
   return counts, false, "malformed_json"
  }
- if len(envelope) != 3 {
-  return counts, false, "envelope_shape"
- }
+	if hasVerifyKeyAlias(envelope, "cli_version", "lockfile_version", "valid", "findings") {
+		return counts, false, "policy_key_alias"
+	}
+	if len(envelope) != 4 {
+		return counts, false, "envelope_shape"
+	}
  for _, key := range []string{"cli_version", "lockfile_version"} {
   var value string
-  if json.Unmarshal(envelope[key], &value) != nil || value == "" {
+  if json.Unmarshal(envelope[key], &value) != nil || value == "" || bytes.Equal(bytes.TrimSpace(envelope[key]), []byte("null")) {
    return counts, false, "version_field"
   }
  }
+	validRaw, exists := envelope["valid"]
+	if !exists || (string(bytes.TrimSpace(validRaw)) != "true" && string(bytes.TrimSpace(validRaw)) != "false") || json.Unmarshal(validRaw, &counts.nativeValid) != nil {
+		return counts, false, "valid_field"
+	}
  rawFindings, ok := envelope["findings"]
  rawFindings = bytes.TrimSpace(rawFindings)
  if !ok || len(rawFindings) == 0 || rawFindings[0] != '[' {
   return counts, false, "findings_field"
  }
- var findings []verifyFinding
- if json.Unmarshal(rawFindings, &findings) != nil {
+	var findings []json.RawMessage
+	if json.Unmarshal(rawFindings, &findings) != nil || findings == nil {
   return counts, false, "findings_shape"
  }
  if len(findings) > maxVerifyFindings {
   return counts, false, "finding_limit"
  }
- for _, finding := range findings {
-  if !knownVerifyValue(verifyCategories, finding.Category) || !knownVerifyValue(verifySeverities, finding.Severity) {
-   counts.unknown++
-   continue
-  }
-  if counts.values[finding.Category] == nil {
-   counts.values[finding.Category] = make(map[string]int)
-  }
-  current := counts.values[finding.Category][finding.Severity]
-  if current >= maxVerifyCount {
-   return verifyCounts{values: make(map[string]map[string]int)}, false, "count_limit"
-  }
-  counts.values[finding.Category][finding.Severity] = current + 1
+	for _, rawFinding := range findings {
+		var finding map[string]json.RawMessage
+		if len(bytes.TrimSpace(rawFinding)) == 0 || json.Unmarshal(rawFinding, &finding) != nil || finding == nil {
+			return counts, false, "findings_shape"
+		}
+		if hasVerifyKeyAlias(finding, "severity") { return counts, false, "policy_key_alias" }
+		severity, hasSeverity := exactVerifyString(finding, "severity")
+		if !hasSeverity || severity == "" { return counts, false, "findings_shape" }
+		if severity == "info" {
+			category, hasCategory := exactVerifyString(finding, "category")
+			if hasCategory && knownVerifyValue(verifyCategories, category) {
+				if !addVerifyCount(&counts, category, severity) { return verifyCounts{values: make(map[string]map[string]int)}, false, "count_limit" }
+			} else {
+				counts.unknownInfo++
+			}
+			continue
+		}
+		if hasVerifyKeyAlias(finding, "category", "dependency") { return counts, false, "policy_key_alias" }
+		category, hasCategory := exactVerifyString(finding, "category")
+		if _, exists := finding["category"]; exists && !hasCategory { return counts, false, "findings_shape" }
+		dependency, hasDependency := exactVerifyString(finding, "dependency")
+		if _, exists := finding["dependency"]; exists && !hasDependency { return counts, false, "findings_shape" }
+		if severity == "warning" && hasCategory && hasDependency && category == "sha-as-ref" && verifySHARefDependency.MatchString(dependency) {
+			if !addVerifyCount(&counts, category, severity) { return verifyCounts{values: make(map[string]map[string]int)}, false, "count_limit" }
+			counts.shaAsRefWarnings++
+			continue
+		}
+		counts.policyCompatible = false
+		if !hasCategory || !knownVerifyValue(verifyCategories, category) || !knownVerifyValue(verifySeverities, severity) {
+			counts.unknown++
+			continue
+		}
+		if !addVerifyCount(&counts, category, severity) { return verifyCounts{values: make(map[string]map[string]int)}, false, "count_limit" }
  }
  return counts, true, ""
+}
+
+func hasVerifyKeyAlias(fields map[string]json.RawMessage, canonical ...string) bool {
+	for key := range fields {
+		for _, name := range canonical {
+			if key != name && strings.EqualFold(key, name) { return true }
+		}
+	}
+	return false
+}
+
+func exactVerifyString(fields map[string]json.RawMessage, key string) (string, bool) {
+	raw, ok := fields[key]
+	if !ok || len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) { return "", false }
+	var value string
+	if json.Unmarshal(raw, &value) != nil { return "", false }
+	return value, true
+}
+
+func addVerifyCount(counts *verifyCounts, category, severity string) bool {
+	if counts.values[category] == nil { counts.values[category] = make(map[string]int) }
+	if counts.values[category][severity] >= maxVerifyCount { return false }
+	counts.values[category][severity]++
+	return true
+}
+
+func kWorkflowLockCompatibility(counts verifyCounts, immutableRefsPassed bool) bool {
+	// Mirrors K's accepted() exception only after its separate immutable-ref gate.
+	return counts.nativeValid && counts.policyCompatible && counts.unknown == 0 && counts.shaAsRefWarnings > 0 && immutableRefsPassed
+}
+
+func immutableActionPolicyPassed(output []byte) bool {
+	return bytes.Equal(output, []byte("PASS immutable_actions\n"))
 }
 
 func knownVerifyValue(allowed []string, value string) bool {
@@ -173,14 +237,40 @@ func verifyFailureDiagnostic(r process.Result, err error) verifyDiagnostic {
   if r.TimedOut { d.conditions["timed_out"] = true }
   if r.Interrupted { d.conditions["interrupted"] = true }
   if r.Overflow { d.conditions["capture_overflow"] = true }
+  if !r.CaptureComplete { d.conditions["capture_incomplete"] = true }
   if !r.CleanupComplete { d.conditions["cleanup_incomplete"] = true }
   if r.Signal != "" { d.conditions["signal_terminated"] = true }
+  if err != nil && !errors.Is(err, process.ErrCapture) && !errors.Is(err, process.ErrOverflow) && !errors.Is(err, process.ErrCleanup) {
+   d.conditions["capture_read_failure"] = true
+  }
  }
  return d
 }
 
 func verifyFindingsEligible(d verifyDiagnostic) bool {
  return d.result == "tool_exit_1_findings" && len(d.conditions) == 0
+}
+
+func parseVerifyFindingsOutput(d verifyDiagnostic, raw []byte, readErr error) verifyDiagnostic {
+	if !verifyFindingsEligible(d) { return d }
+	if readErr != nil {
+		d.result = "capture_read_failure"
+		d.conditions["capture_read_failure"] = true
+		return d
+	}
+	counts, valid, reason := parseVerifyFindingsReason(raw)
+	if !valid {
+		d.result = "json_invalid"
+		d.parseRejection = reason
+		return d
+	}
+	d.counts = counts
+	if counts.unknown > 0 { d.result = "unknown_category" }
+	return d
+}
+
+func admitKWorkflowLockCompatibility(d verifyDiagnostic, immutableResult []byte, immutableErr error) bool {
+	return verifyFindingsEligible(d) && kWorkflowLockCompatibility(d.counts, immutableErr == nil && immutableActionPolicyPassed(immutableResult))
 }
 
 func emitVerifyDiagnostic(d verifyDiagnostic) {
@@ -238,10 +328,16 @@ func writeVerifyDiagnostic(w io.Writer, d verifyDiagnostic) error {
  if d.counts.unknown < 0 || d.counts.unknown > maxVerifyFindings {
   return errors.New("invalid fixed verifier count")
  }
+ if d.counts.unknownInfo < 0 || d.counts.unknownInfo > maxVerifyFindings {
+  return errors.New("invalid fixed verifier count")
+ }
  if d.counts.unknown > 0 {
   if _, err := fmt.Fprintf(w, "VERIFY_FINDING category=unknown severity=unknown count=%d\n", d.counts.unknown); err != nil {
    return err
   }
+ }
+ if d.counts.unknownInfo > 0 {
+  if _, err := fmt.Fprintf(w, "VERIFY_FINDING category=unknown severity=info count=%d\n", d.counts.unknownInfo); err != nil { return err }
  }
  return nil
 }
@@ -263,7 +359,7 @@ func generateActionLock(ctx context.Context)(code int){
  if os.Getenv("CI")!="true"||os.Getenv("GITHUB_REPOSITORY")!="keeldock-platform/ci-kit"||os.Getenv("GITHUB_EVENT_NAME")!="workflow_dispatch"||os.Getenv("GITHUB_REF")!="refs/heads/ci/action-lock-generation-1127"{return 3}
  control,e:=os.Getwd();if e!=nil{return lockFailPrivateSetup}
  var op lockOperation
- if config.Read(filepath.Join(control,"docs","action-lock-operation.json"),&op,4096)!=nil||op.Schema!=1||!protocol.SHA(op.InputCommit)||op.InputTree!=lockInputTree||op.Base!="b59374a9976d240b03387eaac7d91ca4a5697ef5"||!protocol.Digest(op.InputLockSHA256){return 3}
+ if config.Read(filepath.Join(control,"docs","action-lock-operation.json"),&op,4096)!=nil||op.Schema!=1||op.InputCommit!=lockInputCommit||op.InputTree!=lockInputTree||op.Base!="b59374a9976d240b03387eaac7d91ca4a5697ef5"||!protocol.Digest(op.InputLockSHA256){return 3}
  parent:=os.Getenv("RUNNER_TEMP");if _,e:=process.SafePath(parent,".");e!=nil{return 3}
  private,e:=os.MkdirTemp(parent,"action-lock-private-");if e!=nil{return lockFailPrivateSetup}
  defer func(){if os.RemoveAll(private)!=nil&&code==0{code=lockFailCleanup}}()
@@ -278,7 +374,7 @@ func generateActionLock(ctx context.Context)(code int){
  verify := func() verifyDiagnostic {
   index++
   spec := process.Spec{
-   Argv: []string{filepath.Join(parent, "policy-tools", "gh-actions-lock"), "--verify", "--fail-on-warning", "--json=findings"},
+   Argv: []string{filepath.Join(parent, "policy-tools", "gh-actions-lock"), "--verify", "--fail-on-warning", "--json=valid,findings"},
    Root: target,
    Cwd: ".",
    ResultDir: filepath.Join(private, "capture-"+strconv.Itoa(index)),
@@ -291,21 +387,16 @@ func generateActionLock(ctx context.Context)(code int){
   if err == nil && r.ExitCode == 0 && r.CleanupComplete && !r.TimedOut && !r.Overflow {
    return verifyDiagnostic{}
   }
-  if verifyFindingsEligible(d) {
-   raw, readErr := readRegular(r.StdoutPath, 2<<20)
-   if readErr != nil {
-    d.result = "capture_read_failure"
-    return d
-   }
-   counts, valid, reason := parseVerifyFindingsReason(raw)
-   if !valid {
-    d.result = "json_invalid"
-    d.parseRejection = reason
-    return d
-   }
-   d.counts = counts
-   if counts.unknown > 0 {
-    d.result = "unknown_category"
+	if verifyFindingsEligible(d) {
+		raw, readErr := readRegular(r.StdoutPath, 2<<20)
+		d = parseVerifyFindingsOutput(d, raw, readErr)
+		if d.result == "json_invalid" || d.result == "capture_read_failure" { return d }
+		if d.result != "unknown_category" && d.counts.nativeValid && d.counts.policyCompatible && d.counts.unknown == 0 && d.counts.shaAsRefWarnings > 0 {
+    // This fixed no-token check runs only the unchanged script from the exact S checkout above.
+    immutableResult, immutableErr := call(target, []string{"/usr/bin/python3", "-I", "-B", filepath.Join(target, "tests/policy/immutable_actions.py"), "--root", target}, false)
+			if admitKWorkflowLockCompatibility(d, immutableResult, immutableErr) {
+     return verifyDiagnostic{}
+    }
    }
   }
   return d

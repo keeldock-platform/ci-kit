@@ -35,6 +35,8 @@ type Spec struct {
 type Result struct {
 	ExitCode                  int
 	Interrupted, ExitObserved bool
+	// CaptureComplete means both private streams copied and their files closed cleanly.
+	CaptureComplete           bool `json:"-"`
 	Signal                    string
 	TimedOut, Overflow        bool
 	StdoutPath, StderrPath    string
@@ -334,6 +336,7 @@ func run(parent context.Context, s Spec, authority map[string]string) (res Resul
 	select {
 	case <-drained:
 		res.CleanupComplete = ended
+		res.CaptureComplete = ended
 	case <-time.After(s.ReapTimeout):
 		outR.Close()
 		errR.Close()
@@ -379,6 +382,7 @@ func run(parent context.Context, s Spec, authority map[string]string) (res Resul
 	}
 	select {
 	case <-copyErrors:
+		res.CaptureComplete = false
 		if ret == nil {
 			ret = ErrCapture
 		}
@@ -387,11 +391,13 @@ func run(parent context.Context, s Spec, authority map[string]string) (res Resul
 	if !res.CleanupComplete && ret == nil {
 		ret = ErrCleanup
 	}
-	if e = stdout.Close(); e != nil && ret == nil {
-		ret = ErrCapture
+	if e = stdout.Close(); e != nil {
+		res.CaptureComplete = false
+		if ret == nil { ret = ErrCapture }
 	}
-	if e = stderr.Close(); e != nil && ret == nil {
-		ret = ErrCapture
+	if e = stderr.Close(); e != nil {
+		res.CaptureComplete = false
+		if ret == nil { ret = ErrCapture }
 	}
 	return res, ret
 }
