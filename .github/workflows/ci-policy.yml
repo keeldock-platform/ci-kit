@@ -55,7 +55,7 @@ jobs:
           (cd ../caller-control && "$RUNNER_TEMP/policy-tools/zizmor" --no-progress --no-config "${caller_workflows[@]}" "${caller_actions[@]}")
           mapfile -t workflows < <(python3 -B tests/policy/layout.py --workflow-paths)
           "$RUNNER_TEMP/policy-tools/zizmor" --no-progress "${workflows[@]}" .github/actions
-          "$RUNNER_TEMP/policy-tools/gh-actions-lock" --verify --fail-on-warning "${workflows[@]}"
+          python3 -B tests/policy/workflow_lock.py --root . --tool "$RUNNER_TEMP/policy-tools/gh-actions-lock" --kit-sha "$REVIEWED_KIT_SHA"
 
   lock-tools-qualification:
     if: ${{ github.repository == 'keeldock-platform/ci-kit' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
