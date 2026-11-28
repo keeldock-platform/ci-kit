@@ -60,11 +60,31 @@ type manifest struct {
 }
 
 func main() {
-	if run(os.Args[1:]) != nil {
-		fmt.Fprintln(os.Stderr, "FAIL: candidate check")
-		os.Exit(1)
+	os.Exit(candidateCommand(os.Args[1:], os.Stdout, os.Stderr))
+}
+func candidateCommand(args []string, stdout, stderr io.Writer) int {
+	if err := run(args); err != nil {
+		fmt.Fprintln(stderr, candidateFailureLine(err))
+		return 1
 	}
-	fmt.Println("PASS: candidate check")
+	fmt.Fprintln(stdout, "PASS: candidate check")
+	return 0
+}
+
+type hostCheckError string
+
+func (e hostCheckError) Error() string { return string(e) }
+
+// Only fixed source-free host categories can enter public diagnostics.
+func candidateFailureLine(err error) string {
+	var host hostCheckError
+	if errors.As(err, &host) {
+		switch host {
+		case "target", "runtime", "toolchain", "translation-query", "translation", "translation-value", "native-query", "native-value", "native-mismatch":
+			return "FAIL: candidate host " + string(host)
+		}
+	}
+	return "FAIL: candidate check"
 }
 func run(args []string) error {
 	var o options
@@ -78,8 +98,11 @@ func run(args []string) error {
 	flags.StringVar(&o.Dist, "dist", "dist", "snapshot directory")
 	flags.StringVar(&o.Out, "out", "candidate-output", "new output directory")
 	flags.BoolVar(&o.HostOnly, "host-only", false, "check native host only")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || validateHost(o.OS, o.Arch) != nil {
+	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return errCandidate
+	}
+	if err := validateHost(o.OS, o.Arch); err != nil {
+		return err
 	}
 	if o.HostOnly {
 		return nil
@@ -163,12 +186,28 @@ func run(args []string) error {
 	return nil
 }
 func validateHost(goos, arch string) error {
-	if goos != "darwin" && goos != "linux" && goos != "windows" || arch != "amd64" && arch != "arm64" || runtime.GOOS != goos || runtime.GOARCH != arch || runtime.Version() != expectedGoVersion {
-		return errCandidate
+	return validateHostIdentity(goos, arch, runtime.GOOS, runtime.GOARCH, runtime.Version(), nativeArchitecture)
+}
+func validateHostIdentity(goos, arch, actualOS, actualArch, version string, inspect func() (string, error)) error {
+	if goos != "darwin" && goos != "linux" && goos != "windows" || arch != "amd64" && arch != "arm64" {
+		return hostCheckError("target")
 	}
-	actual, e := nativeArchitecture()
-	if e != nil || actual != arch {
-		return errCandidate
+	if actualOS != goos || actualArch != arch {
+		return hostCheckError("runtime")
+	}
+	if version != expectedGoVersion {
+		return hostCheckError("toolchain")
+	}
+	actual, err := inspect()
+	if err != nil {
+		var host hostCheckError
+		if errors.As(err, &host) {
+			return host
+		}
+		return hostCheckError("native-query")
+	}
+	if actual != arch {
+		return hostCheckError("native-mismatch")
 	}
 	return nil
 }

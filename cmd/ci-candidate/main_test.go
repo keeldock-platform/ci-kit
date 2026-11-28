@@ -16,6 +16,7 @@ func TestCandidateManifestCannotClaimQualification(t *testing.T) {
 		t.Fatal("invalid public candidate manifest")
 	}
 }
+
 func TestCandidateAcceptsInstalledPinnedNativeHost(t *testing.T) {
 	if runtime.Version() != expectedGoVersion {
 		t.Fatalf("candidate toolchain must match the pinned build: %s", runtime.Version())
