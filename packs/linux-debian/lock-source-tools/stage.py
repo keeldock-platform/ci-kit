@@ -113,6 +113,16 @@ def write(path,raw,executable=False):
     path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     with path.open('xb') as stream:require(stream.write(raw)==len(raw))
     path.chmod(0o700 if executable else 0o600)
+def npm_config_files(work):
+    user=work/'npm-userconfig';global_config=work/'npm-globalconfig'
+    write(user,b'');write(global_config,b'')
+    return user,global_config
+def npm_version_probe(node,npm_root,work,version):
+    user,global_config=npm_config_files(work)
+    result=command([str(node),str(npm_root/'bin/npm-cli.js'),'--version','--ignore-scripts',
+        '--userconfig='+str(user),'--globalconfig='+str(global_config)],work).strip()
+    require(result==version.encode())
+    return result
 def command(argv,work):
     # Pipes are drained in bounded chunks, before any file/buffer can grow beyond
     # its declared stream budget. No new session/group is created. The existing
@@ -357,7 +367,7 @@ def run(mode,work,parent):
         require(command([str(dest/'bin/node'),'--version'],temp).strip()==('v'+entry['node_version']).encode())
         probe=json.loads(command([str(dest/'bin/node'),'-p','JSON.stringify({platform:process.platform,arch:process.arch})'],temp))
         require(probe=={'platform':'linux','arch':'x64'})
-        require(command([str(dest/'bin/node'),str(npm_root/'bin/npm-cli.js'),'--version','--ignore-scripts','--userconfig=/dev/null','--globalconfig=/dev/null'],temp).strip()==entry['npm_version'].encode())
+        npm_version_probe(dest/'bin/node',npm_root,temp,entry['npm_version'])
         require(tree(npm_root)==before and digest((dest/'bin/node').read_bytes())==node_before)
         tools[role]={'node':role+'/bin/node','npm_root':role+'/lib/node_modules/npm','node_sha256':node_before,'npm_tree_sha256':digest(canonical(before)),'node_version':entry['node_version'],'npm_version':entry['npm_version']}
     if mode=='stage':

@@ -12,6 +12,17 @@ SPEC.loader.exec_module(stage)
 
 
 class QualificationErrorOutput(unittest.TestCase):
+    def test_npm_config_files_are_distinct_empty_private_regular_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            work=Path(td);npm=work/'npm';(npm/'bin').mkdir(parents=True)
+            cli=npm/'bin/npm-cli.js';cli.write_text('')
+            user,global_config=stage.npm_config_files(work)
+            self.assertNotEqual(user,global_config)
+            for path in (user,global_config):
+                self.assertTrue(path.is_file());self.assertFalse(path.is_symlink())
+                self.assertEqual(path.stat().st_mode & 0o777,0o600);self.assertEqual(path.read_bytes(),b'')
+            with self.assertRaises(FileExistsError):stage.npm_config_files(work)
+
     def test_actual_child_failure_retains_bounded_streams(self):
         with tempfile.TemporaryDirectory() as td:
             work = Path(td)
