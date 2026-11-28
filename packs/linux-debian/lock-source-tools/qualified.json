@@ -1,9 +1,34 @@
 {
-  "schema_version": 1,
-  "approved": false,
+  "approved": true,
   "platform": "linux-x64",
-  "release_lock_sha256": null,
-  "tools": null,
-  "provider_receipt": null,
-  "stage_script_sha256": null
+  "provider_receipt": {
+    "artifact_id": "15240892985",
+    "attempt": "1",
+    "conclusion": "success",
+    "kit_sha": "10349e7fbdde8fcbd3283b0c59996242c7f42085",
+    "repository": "keeldock-platform/ci-kit",
+    "run_id": "46090313643",
+    "workflow_path": ".github/workflows/ci-policy.yml"
+  },
+  "release_lock_sha256": "b91019d82b5c706e8550b15922be4efc7fdc215270329779486881143624e977",
+  "schema_version": 1,
+  "stage_script_sha256": "2e7888c75352924600e9f3c10918ff1a61e9b06277fd146a2fa0d6273154846f",
+  "tools": {
+    "root": {
+      "node": "root/bin/node",
+      "node_sha256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb",
+      "node_version": "24.22.1",
+      "npm_root": "root/lib/node_modules/npm",
+      "npm_tree_sha256": "5579411458c801c31c15d2816503ce0b1a4c3401d7efcdab13d98122845366e1",
+      "npm_version": "11.19.1"
+    },
+    "runtime": {
+      "node": "runtime/bin/node",
+      "node_sha256": "904a6d3484241d466989f9df9ba3aab822b1496191bdb28230eb491a55c32a52",
+      "node_version": "24.22.2",
+      "npm_root": "runtime/lib/node_modules/npm",
+      "npm_tree_sha256": "e220623315b4214c2720ae17c297eccea9598390fe3aa2dd2c4447e4e5793ee8",
+      "npm_version": "12.2.2"
+    }
+  }
 }
