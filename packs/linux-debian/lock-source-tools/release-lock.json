@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "platform": "linux-x64",
+  "public_keyring": {
+    "url": "https://raw.githubusercontent.com/nodejs/release-keys/481637f813e912c4aa3622d7964ab426c97b8e8d/gpg-only-active-keys/pubring.kbx",
+    "status": 200,
+    "bytes": 21011,
+    "sha256": "140f2ad5260fd62773b6243ce8e1d3009645d558f121b8262c55e383dc285932",
+    "git_blob_sha1": "bae91a9ce595d5775a2e2a998af04dee044c865d",
+    "scope": "Public Node release verification material read only to compute metadata; no local keyring stored/imported, private key read, or signature verification performed"
+  },
+  "node_primary_fingerprint": "5BE8A3F6C8A5C01D106C0AD820B1A390B168D356",
+  "npm_verification_key": {
+    "expires": null,
+    "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+    "keytype": "ecdsa-sha2-nistp256",
+    "scheme": "ecdsa-sha2-nistp256",
+    "key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEY6Ya7W++7aUPzvMTrezH6Ycx3c+HOKYCcNGybJZSCJq/fd7Qa8uuAKtdIkUQtQiEKERhAmE5lMMJhP8OkDOa2g=="
+  },
+  "tools": {
+    "root": {
+      "node_version": "24.22.1",
+      "npm_version": "11.19.1",
+      "node": {
+        "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.gz",
+        "sha256": "eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c",
+        "archive_member": "node-v24.22.1-linux-x64/bin/node",
+        "shasums_url": "https://nodejs.org/dist/v24.22.1/SHASUMS256.txt",
+        "shasums_sha256": "fdfbffc969c0f604beff0124d409b33a43b53f5c681d6220f80023e0d6df9dc4",
+        "signature_url": "https://nodejs.org/dist/v24.22.1/SHASUMS256.txt.sig",
+        "signature_sha256": "4e8fc0160f74781e90e3faf3f8218a72f4cee84d3ac80b9b6d448cec5b8bb7ad"
+      },
+      "npm": {
+        "url": "https://registry.npmjs.org/npm/-/npm-11.19.1.tgz",
+        "integrity": "sha512-ztsxKxt/kkIaAs+2i0GU6I+DRmUdrNasxTZKJe9TCdSjKxlhah/4r/hl5ygMD6XAg1qZ9c2TNomR4qgOydp10g==",
+        "signatures": [
+          {
+            "sig": "MEUCIQDsGhppMNV7j0XH5Tz4eKaPE6x2AzT8NLY8pncJ1hnnuwIgMdFUdG/csKoKid7QE1r+QcO7BCXRhoEUS6CDjdfDmRM=",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          },
+          {
+            "sig": "MEQCIDzoojn1A7nuQ5k/LUgsmXRlEdyK/Wwr4GHmdeYwbc5RAiBGPyVG5PcH1hKQHxPUa3NBUcoWhAazcqPYuOA4+0P+1Q==",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          }
+        ],
+        "file_count": 1943,
+        "unpacked_size": 12223891
+      }
+    },
+    "runtime": {
+      "node_version": "24.22.2",
+      "npm_version": "12.2.2",
+      "node": {
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-x64.tar.gz",
+        "sha256": "361718c444e49af2ca5a110c83ba6a8901143f23ab285ebbef0341f391f482a9",
+        "archive_member": "node-v24.22.2-linux-x64/bin/node",
+        "shasums_url": "https://nodejs.org/dist/v24.22.2/SHASUMS256.txt",
+        "shasums_sha256": "aec92ae945293821c22aed4c37b97741688254bac353b861fc9fb25b81ce4567",
+        "signature_url": "https://nodejs.org/dist/v24.22.2/SHASUMS256.txt.sig",
+        "signature_sha256": "0dc0feb73ffcafe5875a7f34f3aa9a51787f68d85a1bde8a49e27257ad74ea07"
+      },
+      "npm": {
+        "url": "https://registry.npmjs.org/npm/-/npm-12.2.2.tgz",
+        "integrity": "sha512-KglgbZyacf7jH+FHuNRqVuCzQi8VhI2a7J87Ix43FsPTuZoGWmIXXGdZtBUOA79vwL+IJREqURVzupA7PsQTcA==",
+        "signatures": [
+          {
+            "sig": "MEYCIQC0H2VHrmUE7Wlz8zpinDV1V0uGWGt+Yhg2dGGoAitpVQIhAOUSSCIKTU9mVFXcblFiUxW9225+DHd7VEpXSV4xj7v0",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          },
+          {
+            "sig": "MEUCIQCo1xH/1Y+aHGmvJ5MgJLr3O/rua+Xbf3JSALwMSqEmmgIgSd+Sq+eknLwFvPfGhv9qOr9dNWlPiT45X6//lHkOHOo=",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          }
+        ],
+        "file_count": 1943,
+        "unpacked_size": 12459070
+      }
+    }
+  }
+}

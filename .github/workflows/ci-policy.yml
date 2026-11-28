@@ -40,6 +40,7 @@ jobs:
           go test ./...
           go vet ./...
           python3 -B -m unittest discover -s tests/integration -p 'test_*.py'
+          python3 -I -B -m unittest discover -s packs/linux-debian/lock-source-tools -p 'test_*.py'
           python3 -B tests/policy/layout.py --root ../caller-control
           python3 -B tests/policy/immutable_actions.py --root ../caller-control --kit-sha "$REVIEWED_KIT_SHA"
           python3 -B tests/policy/immutable_actions.py
@@ -54,4 +55,33 @@ jobs:
           (cd ../caller-control && "$RUNNER_TEMP/policy-tools/zizmor" --no-progress --no-config "${caller_workflows[@]}" "${caller_actions[@]}")
           mapfile -t workflows < <(python3 -B tests/policy/layout.py --workflow-paths)
           "$RUNNER_TEMP/policy-tools/zizmor" --no-progress "${workflows[@]}" .github/actions
-          "$RUNNER_TEMP/policy-tools/gh-actions-lock" --verify --fail-on-warning "${workflows[@]}"
+          python3 -B tests/policy/workflow_lock.py --root . --tool "$RUNNER_TEMP/policy-tools/gh-actions-lock" --kit-sha "$REVIEWED_KIT_SHA"
+
+  lock-tools-qualification:
+    if: ${{ github.repository == 'keeldock-platform/ci-kit' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CI_KIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Kit
+        uses: $/.github/actions/kit-bootstrap
+        with:
+          kit-sha: ${{ github.sha }}
+          policy-only: 'true'
+      - name: Qualify exact public tools
+        uses: $/.github/actions/lock-source-tools
+        with:
+          mode: qualify
+      - name: Publish source-free tool metadata only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: lock-tools-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-lock-tools-qualification.json
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+          include-hidden-files: false
+          compression-level: 0

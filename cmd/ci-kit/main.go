@@ -29,6 +29,8 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == "native-hook" {
 		code = nativeHook(ctx)
 	}
+	if len(os.Args) == 3 && os.Args[1] == "tool-stage" { code = lockTools(ctx,os.Args[2]) }
+	if len(os.Args) == 2 && os.Args[1] == "action-lock-generate" { code = generateActionLock(ctx) }
 	if len(os.Args) == 1 {
 		code = execute(ctx)
 	}

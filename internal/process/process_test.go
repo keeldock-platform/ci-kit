@@ -115,7 +115,7 @@ func TestCapturePrivateBeforeLaunchAndExactBytes(t *testing.T) {
 	value := hex.EncodeToString(marker) + " é spaces\n::error::fixture"
 	s := fixtureSpec(t, "ok", value)
 	r, e := Run(context.Background(), s)
-	if e != nil || r.ExitCode != 0 || !r.CleanupComplete {
+	if e != nil || r.ExitCode != 0 || !r.CleanupComplete || !r.CaptureComplete {
 		t.Fatalf("capture failed: %+v %v", r, e)
 	}
 	for _, p := range []string{r.StdoutPath, r.StderrPath} {
@@ -139,7 +139,7 @@ func TestOriginalExitAndCrashRemainFailures(t *testing.T) {
 	for _, mode := range []string{"exit", "crash"} {
 		t.Run(mode, func(t *testing.T) {
 			r, e := Run(context.Background(), fixtureSpec(t, mode))
-			if e == nil || r.ExitCode == 0 || !r.CleanupComplete {
+			if e == nil || r.ExitCode == 0 || !r.CleanupComplete || !r.CaptureComplete {
 				t.Fatalf("failure lost: %+v %v", r, e)
 			}
 			if !r.ExitObserved || r.Interrupted {
@@ -164,7 +164,7 @@ func TestOutputOverflowIsBoundedFailure(t *testing.T) {
 	s := fixtureSpec(t, "overflow")
 	s.OutputLimit = 1024
 	r, e := Run(context.Background(), s)
-	if e == nil || !r.Overflow || !r.CleanupComplete {
+	if e == nil || !r.Overflow || !r.CleanupComplete || r.CaptureComplete {
 		t.Fatalf("overflow lost: %+v %v", r, e)
 	}
 	st, e := os.Stat(r.StdoutPath)
@@ -172,6 +172,7 @@ func TestOutputOverflowIsBoundedFailure(t *testing.T) {
 		t.Fatal("output limit not enforced")
 	}
 }
+
 func TestCredentialAndRunnerChannelsAreScrubbed(t *testing.T) {
 	for _, key := range []string{"GH_TOKEN", "GITHUB_TOKEN", "ACTIONS_RUNTIME_TOKEN", "GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_STEP_SUMMARY", "NODE_OPTIONS", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "SSH_AUTH_SOCK", "GIT_CONFIG_COUNT", "GH_DEBUG"} {
 		t.Setenv(key, "synthetic")

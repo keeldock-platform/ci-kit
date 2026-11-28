@@ -7,7 +7,7 @@
   "properties": {
     "schema_version": {"const": 1},
     "cli_version": {"type": "string"},
-    "command": {"enum": ["invalid","version","doctor","list","explain","run","dispatch","status","wait","failures","cancel","results purge"]},
+    "command": {"enum": ["invalid","version","doctor","list","explain","run","dispatch","status","wait","failures","source-output","cancel","results purge"]},
     "scope": {"enum": ["local","hosted"]},
     "state": {"enum": ["ready","queued","running","passed","failed","blocked","unknown","cancelled","superseded","deadline"]},
     "ok": {"type": "boolean"},
@@ -54,7 +54,7 @@
         "request_id":{"type":["string","null"]},"ci_repo":{"type":["string","null"]},
         "workflow_id":{"type":["string","null"]},"run_id":{"type":["string","null"]},
         "attempt":{"type":["integer","null"],"minimum":1},"url":{"type":["string","null"]},
-        "purpose":{"enum":[null,"feedback","admission"]}
+        "purpose":{"enum":[null,"feedback","admission","source-output"]}
       }},
     "stage": {"type":"object","additionalProperties":false,
       "required":["slot","platform","state","failure_class","started_at","completed_at"],

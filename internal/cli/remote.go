@@ -21,16 +21,17 @@ import (
 func (a *app) dispatch() *cobra.Command {
 	var concern, id string
 	var opts planner.Options
-	var admission bool
+	var admission, sourceOutput bool
 	c := &cobra.Command{Use: "dispatch", Short: "Request one registered feedback or admission run", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		a.begin("dispatch", true)
+		if sourceOutput && (admission || concern != "core" || c.Flags().Changed("mode") || len(opts.Units)+len(opts.Platforms)+len(opts.Variants)+len(opts.Checks) != 0 || opts.Shard != "" || opts.Quick) { return gh.Fail(2,"usage") }
 		opts.Context = a.ctx
 		opts.Platforms = unique(opts.Platforms)
 		a.result.Operation = &protocol.Operation{}
 		if a.offline {
 			return gh.Fail(3, "offline_refused")
 		}
-		if !slices.Contains([]string{"affected", "full", "candidate"}, opts.Mode) || !config.Alias(concern) || !protocol.SHA(opts.Base) || !protocol.SHA(opts.SHA) || len(opts.Units) == 0 && !c.Flags().Changed("mode") || len(opts.Units) > 0 && c.Flags().Changed("mode") || admission && (len(opts.Units) > 0 || len(opts.Platforms) > 0 || len(opts.Variants) > 0 || len(opts.Checks) > 0 || opts.Shard != "" || opts.Quick) || opts.Quick && (opts.Mode == "full" || opts.Mode == "candidate") {
+		if !slices.Contains([]string{"affected", "full", "candidate"}, opts.Mode) || !config.Alias(concern) || !protocol.SHA(opts.Base) || !protocol.SHA(opts.SHA) || len(opts.Units) == 0 && !c.Flags().Changed("mode") && !sourceOutput || len(opts.Units) > 0 && c.Flags().Changed("mode") || admission && (len(opts.Units) > 0 || len(opts.Platforms) > 0 || len(opts.Variants) > 0 || len(opts.Checks) > 0 || opts.Shard != "" || opts.Quick) || opts.Quick && (opts.Mode == "full" || opts.Mode == "candidate") {
 			return gh.Fail(2, "usage")
 		}
 		if id == "" {
@@ -90,6 +91,47 @@ func (a *app) dispatch() *cobra.Command {
 		}
 		if sourceConfig.Concern != concern {
 			return gh.Fail(3, "policy_refused")
+		}
+		if sourceOutput {
+			if !slices.Contains(reg.Platforms,"linux-debian") { return gh.Fail(3,"policy_refused") }
+			payload,e := protocol.NewDispatch(concern,opts.SHA,opts.Base,"unit","source-output","linux-debian","all",id)
+			if e != nil { return gh.Fail(2,"usage") }
+		composition, e := a.committedComposition(root, opts.SHA, sourceConfig)
+		if e != nil {
+			return e
+		}
+		client, e := a.client(root)
+		if e != nil {
+			return e
+		}
+		if e = client.Preflight(a.ctx, reg, root, opts.SHA, opts.Base); e != nil {
+			return e
+		}
+		dir, e := a.stateDirectory(root, cfg.ResultsDir, true)
+		if e != nil {
+			return e
+		}
+		if e = gh.SavePending(dir, reg, payload, composition); e != nil {
+			return e
+		}
+		x, run, e := client.DispatchRun(a.ctx, reg, payload, composition)
+		a.result.Identity = gh.ResultIdentity(x, run)
+		a.result.Identity.RequestID = &id
+		if protocol.Numeric(x.RunID) {
+			a.result.Operation.DispatchAccepted = true
+		}
+		if e != nil {
+			return e
+		}
+		a.result.Operation.DispatchAccepted = true
+		a.result.State = "queued"
+		if run.Status == "in_progress" {
+			a.result.State = "running"
+		}
+		if e = gh.SaveExpectation(dir, x); e != nil {
+			return e
+		}
+		return nil
 		}
 		units, e := a.committedCatalogue(root, opts.SHA, sourceConfig)
 		if e != nil {
@@ -199,6 +241,7 @@ func (a *app) dispatch() *cobra.Command {
 	c.Flags().StringVar(&opts.Mode, "mode", "affected", "affected, full or candidate")
 	c.Flags().StringArrayVar(&opts.Platforms, "platform", nil, "Select a feedback platform")
 	c.Flags().BoolVar(&admission, "admission", false, "Request complete admission coverage")
+	c.Flags().BoolVar(&sourceOutput,"lock-source-output",false,"Request explicitly authorized private root/runtime lock source output; never admission")
 	c.Flags().StringVar(&id, "request-id", "", "Existing request UUIDv4 for reconciliation")
 	c.Flags().BoolVar(&opts.Quick, "quick", false, "Run related feedback tests")
 	c.Flags().StringArrayVar(&opts.Variants, "variant", nil, "Select a declared AXIS=VALUE")
@@ -207,7 +250,7 @@ func (a *app) dispatch() *cobra.Command {
 	return c
 }
 func (a *app) remote(name string) *cobra.Command {
-	var concern, privateReport, privateOutput, privateBundle, diagnosticKey, experimentReceipt string
+	var concern, privateReport, privateOutput, privateBundle, diagnosticKey, experimentReceipt, sourcePolicy string
 	var attempt int
 	var deadline time.Duration
 	def := 2 * time.Hour
@@ -305,7 +348,7 @@ func (a *app) remote(name string) *cobra.Command {
 		defer cancel()
 		var r protocol.Result
 		switch name {
-		case "status", "failures":
+		case "status", "failures", "source-output":
 			r, e = client.Status(ctx, x, name, Version)
 		case "wait":
 			r, e = client.Wait(ctx, x, name, Version)
@@ -317,6 +360,10 @@ func (a *app) remote(name string) *cobra.Command {
 			r, e = client.Cancel(ctx, x, Version, record)
 		}
 		a.result = r
+		if name == "source-output" && e == nil {
+			if !r.OK || r.State != "passed" {return gh.Fail(6,"missing_evidence")}
+			return a.retrieveSourceOutput(ctx,client,x,sourcePolicy,diagnosticKey,privateOutput)
+		}
 		if name == "failures" && e == nil && r.ExitCode == 1 {
 			if !diagnosticsLocal() {
 				return gh.Fail(3, "policy_refused")
@@ -356,6 +403,11 @@ func (a *app) remote(name string) *cobra.Command {
 		c.Flags().StringVar(&diagnosticKey, "identity", "", "Coordinator age identity (local only)")
 		c.Flags().StringVar(&privateReport, "private-report", "", "Read a local user-only JUnit report")
 		c.Flags().StringVar(&privateOutput, "private-output", "", "Create a user-only file listing failed names and errors")
+	}
+	if name == "source-output" {
+		c.Flags().StringVar(&sourcePolicy,"source-policy","","Existing private owner-approved source-return policy")
+		c.Flags().StringVar(&diagnosticKey,"identity","","Existing owner-local age identity")
+		c.Flags().StringVar(&privateOutput,"private-output","","New user-only directory containing only the two source locks")
 	}
 	c.Flags().IntVar(&attempt, "attempt", 0, "Pin an explicit run attempt")
 	if name == "wait" || name == "cancel" {

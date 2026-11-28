@@ -98,3 +98,127 @@ jobs:
         uses: $/.github/actions/candidate-upload
         with:
           name: tool-candidate-${{ matrix.os }}-${{ matrix.arch }}-${{ github.sha }}
+
+  action-lock-generation:
+    if: ${{ github.repository == 'keeldock-platform/ci-kit' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/ci/action-lock-generation-1127' && github.event.repository.private == false }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed public generation control
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select pinned native Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
+        with:
+          go-version: '1.27.4'
+          cache: false
+          check-latest: false
+      - name: Fetch exact maintained generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/policy-tools"
+          curl --fail --silent --show-error --proto '=https' --proto-redir '=https' --location --max-time 120 --max-filesize 268435456 -o "$RUNNER_TEMP/policy-tools/gh-actions-lock" https://github.com/github/gh-actions-lock/releases/download/v0.5.1/linux-amd64
+          printf '94009f287cfcc046ff371824824c203a8a44c981ca2dac344052744897c29c3a  %s\n' "$RUNNER_TEMP/policy-tools/gh-actions-lock" | sha256sum --check --status
+          chmod 700 "$RUNNER_TEMP/policy-tools/gh-actions-lock"
+      - name: Build reviewed source-free generation helper
+        working-directory: control
+        shell: bash
+        env:
+          CGO_ENABLED: '0'
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          go mod verify
+          go build -mod=readonly -trimpath -o "$RUNNER_TEMP/lock-generation-helper" ./cmd/ci-kit
+      - name: Test fixed action-lock diagnostics
+        working-directory: control
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          go test -mod=readonly ./cmd/ci-kit ./internal/process \
+            -run '^(TestParseVerifyFindingsKeepsOnlyAllowlistedCounts|TestParseVerifyFindingsUnknownAndInvalidCases|TestUnknownVerifyCategoryUsesOnlyFixedUnknownCount|TestParseVerifyFindingsBounds|TestVerifyFailureClassificationPreservesFirstFailureAndCleanup|TestWriteVerifyDiagnosticRejectsUnboundedOrUnknownValues|TestPublicActionLockBridgeAcceptsOnlyFixedVerificationVectors|TestParseVerifyFindingsMatchesPinnedV051WriterEnvelope|TestParseVerifyFindingsReportsOnlyFixedRejectionReason|TestKWorkflowLockCompatibilityRequiresExactAllowedFindings|TestKWorkflowLockCompatibilityRequiresObservedCleanExitAndIndependentRefs|TestCaptureCompleteIsInMemoryOnlyAndLegacyResultWireDecodes|TestCapturePrivateBeforeLaunchAndExactBytes|TestOriginalExitAndCrashRemainFailures|TestOutputOverflowIsBoundedFailure)$' \
+            -count=1 -timeout=3m
+      - name: Generate and verify exactly one native lock
+        working-directory: control
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: '"$RUNNER_TEMP/lock-generation-helper" action-lock-generate'
+      - name: Return genuine generated file only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: generated-actions-lock-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/generated-action-lock/actions.lock
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+          include-hidden-files: false
+          compression-level: 0
+
+  lock-tool-qualification:
+    if: ${{ github.repository == 'keeldock-platform/ci-kit' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/ci/action-lock-generation-1127' && github.event.repository.private == false }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout reviewed public qualification control
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: public-control
+          persist-credentials: false
+      - name: Select pinned native Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
+        with:
+          go-version: '1.27.4'
+          cache: false
+          check-latest: false
+      - name: Check native execution host
+        working-directory: public-control
+        run: go run ./cmd/ci-candidate -host-only -os linux -arch amd64
+      - name: Run all source-free staging fixtures
+        working-directory: public-control
+        run: python3 -I -B -m unittest discover -s packs/linux-debian/lock-source-tools -p 'test_*.py'
+      - name: Test candidate route and record guards
+        working-directory: public-control
+        env:
+          GOTOOLCHAIN: local
+        run: go test -mod=readonly ./cmd/ci-kit -run '^(TestLockToolsCandidateRouteGuard|TestLockToolsNormalRoutes|TestCandidateReceiptWriteContract|TestCandidateReceiptWriteFailuresRemovePartialFile|TestLockToolsBoundedCaptureUsesExistingOwnerCleanup|TestReadQualificationCaptureBoundsAndTruncation|TestReadQualificationCaptureRefusesMissingSymlinkAndDirectory|TestQualificationFailureLineEscapesControlAndWorkflowCommands)$' -count=1 -timeout=6m
+      - name: Test Python to Go staging tree contract
+        working-directory: public-control
+        env:
+          GOTOOLCHAIN: local
+        run: go test -mod=readonly ./internal/sourceoutput -run '^TestStagingTreeDigestMatchesToolVerifier$' -count=1 -timeout=3m
+      - name: Build qualification helper
+        working-directory: public-control
+        env:
+          CGO_ENABLED: '0'
+          GOTOOLCHAIN: local
+        run: go build -mod=readonly -trimpath -o "$RUNNER_TEMP/lock-qualification-helper" ./cmd/ci-kit
+      - name: Run bounded source-free qualification
+        working-directory: public-control
+        env:
+          CI_KIT_SHA: ${{ github.sha }}
+          CI_PLATFORM: linux-debian
+          CI_KIT_OPERATION: lock-qualification
+        run: cd .. && "$RUNNER_TEMP/lock-qualification-helper" tool-stage qualify-candidate
+      - name: Upload candidate qualification record only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: lock-tool-candidate-qualification-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-lock-tools-candidate-qualification.json
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+          include-hidden-files: false
+          compression-level: 0

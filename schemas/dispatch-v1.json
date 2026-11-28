@@ -52,7 +52,8 @@
         "purpose": {
           "enum": [
             "feedback",
-            "admission"
+            "admission",
+            "source-output"
           ]
         },
         "platforms": {
@@ -72,7 +73,37 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "purpose": {
+                "const": "source-output"
+              }
+            },
+            "required": [
+              "purpose"
+            ]
+          },
+          "then": {
+            "properties": {
+              "concern": {
+                "const": "core"
+              },
+              "mode": {
+                "const": "unit"
+              },
+              "platforms": {
+                "const": "linux-debian"
+              },
+              "selector": {
+                "const": "all"
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

@@ -53,9 +53,10 @@ func (d Dispatch) Validate() error {
 		}
 	}
 	i := d.Inputs
-	if !concernPattern.MatchString(i["concern"]) || !SHA(i["source_sha"]) || !SHA(i["base_sha"]) || !UUID(i["request_id"]) || i["kit_api"] != "1" || !slices.Contains([]string{"quick", "unit", "affected", "full", "candidate"}, i["mode"]) || !slices.Contains([]string{"feedback", "admission"}, i["purpose"]) {
+	if !concernPattern.MatchString(i["concern"]) || !SHA(i["source_sha"]) || !SHA(i["base_sha"]) || !UUID(i["request_id"]) || i["kit_api"] != "1" || !slices.Contains([]string{"quick", "unit", "affected", "full", "candidate"}, i["mode"]) || !slices.Contains([]string{"feedback", "admission", "source-output"}, i["purpose"]) {
 		return bad
 	}
+	if i["purpose"] == "source-output" && (i["concern"] != "core" || i["mode"] != "unit" || i["platforms"] != "linux-debian" || i["selector"] != "all") { return bad }
 	if i["purpose"] == "admission" && (i["platforms"] != "all" || i["selector"] != "all" || i["mode"] == "quick" || i["mode"] == "unit") {
 		return bad
 	}
